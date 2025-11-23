@@ -1,51 +1,48 @@
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
+
+from inventario.models import Producto
+from clientes.models import Cliente
+
 
 class Venta(models.Model):
-    TIPO_PAGO_CHOICES = [
-        ('EFECTIVO', 'Efectivo'),
-        ('DEBITO', 'Débito'),
-        ('CREDITO', 'Crédito'),
-        ('TRANSFERENCIA', 'Transferencia'),
-        ('OTRO', 'Otro'),
-    ]
-
-    fecha = models.DateTimeField(auto_now_add=True)
-  
     cliente = models.ForeignKey(
-        'clientes.Cliente',       
+        Cliente,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        help_text="Cliente asociado (opcional)",
+        related_name="ventas",
     )
-    tipo_pago = models.CharField(
-        max_length=20,
-        choices=TIPO_PAGO_CHOICES,
-        default='EFECTIVO',
-    )
-    es_credito = models.BooleanField(
-        default=False,
-        help_text="Marcar si esta venta es a crédito",
-    )
-    total = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0,
-        help_text="Total final de la venta",
-    )
-    observaciones = models.TextField(
+    
+    nombre_cliente_libre = models.CharField(
+        "Nombre cliente (libre)",
+        max_length=150,
         blank=True,
-        help_text="Notas internas de la venta (opcional)",
+        help_text="Usar si el cliente no está registrado",
     )
 
-    class Meta:
-        verbose_name = "Venta"
-        verbose_name_plural = "Ventas"
-        ordering = ['-fecha']
+    fecha = models.DateTimeField(default=timezone.now)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    es_credito = models.BooleanField(default=False)
+    observaciones = models.TextField(blank=True)
+
+    def actualizar_total(self):
+        """Recalcula el total a partir de los detalles."""
+        total = sum(
+            (detalle.subtotal or Decimal("0.00"))
+            for detalle in self.detalles.all()
+        )
+        self.total = total
+        self.save(update_fields=["total"])
 
     def __str__(self):
         if self.cliente:
-            return f"Venta #{self.id} - {self.cliente} - ${self.total}"
+            return f"Venta #{self.id} - {self.cliente.nombre} - ${self.total}"
+        if self.nombre_cliente_libre:
+            return f"Venta #{self.id} - {self.nombre_cliente_libre} - ${self.total}"
         return f"Venta #{self.id} - ${self.total}"
 
 
@@ -53,30 +50,60 @@ class DetalleVenta(models.Model):
     venta = models.ForeignKey(
         Venta,
         on_delete=models.CASCADE,
-        related_name='detalles'
+        related_name="detalles",
     )
-
     producto = models.ForeignKey(
-        'inventario.Producto',
+        Producto,
         on_delete=models.PROTECT,
+        related_name="detalles_venta",
     )
     cantidad = models.PositiveIntegerField(default=1)
-    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
-    subtotal = models.DecimalField(
+    precio_unitario = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        editable=False,   
+        null=True,
+        blank=True,
     )
-
-    class Meta:
-        verbose_name = "Detalle de venta"
-        verbose_name_plural = "Detalles de venta"
-
-    def __str__(self):
-        return f"{self.producto} x {self.cantidad}"
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     def save(self, *args, **kwargs):
-        # Calcular subtotal automáticamente
-        self.subtotal = (self.precio_unitario or 0) * self.cantidad
+        """
+        - Pone precio_unitario = precio_venta del producto si viene vacío
+        - Ajusta stock del producto (nuevo, o cambio de cantidad)
+        - Recalcula subtotal
+        - Actualiza total de la venta
+        """
+        if self.pk:
+            anterior = DetalleVenta.objects.get(pk=self.pk)
+            diferencia = self.cantidad - anterior.cantidad
+        else:
+            anterior = None
+            diferencia = self.cantidad
+
+        if self.precio_unitario is None:
+            self.precio_unitario = self.producto.precio_venta
+
+        if diferencia > 0:
+            if not self.producto.hay_stock(diferencia):
+                raise ValidationError(
+                    f"No hay stock suficiente de '{self.producto.nombre}' "
+                    f"para vender {self.cantidad} unidades."
+                )
+            self.producto.descontar_stock(diferencia)
+        elif diferencia < 0:
+            self.producto.aumentar_stock(-diferencia)
+
+        self.subtotal = (self.precio_unitario or Decimal("0.00")) * self.cantidad
+
         super().save(*args, **kwargs)
 
+        self.venta.actualizar_total()
+
+    def delete(self, *args, **kwargs):
+        venta = self.venta
+        self.producto.aumentar_stock(self.cantidad)
+        super().delete(*args, **kwargs)
+        venta.actualizar_total()
+
+    def __str__(self):
+        return f"{self.producto.nombre} x {self.cantidad}"

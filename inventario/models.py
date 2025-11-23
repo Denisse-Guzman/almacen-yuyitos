@@ -36,8 +36,15 @@ class Producto(models.Model):
     precio_compra = models.DecimalField(max_digits=10, decimal_places=2)
     precio_venta = models.DecimalField(max_digits=10, decimal_places=2)
 
-    stock_actual = models.IntegerField(default=0)
-    stock_minimo = models.IntegerField(default=0)
+    stock_actual = models.PositiveIntegerField(
+        default=0,
+        help_text="Cantidad disponible en bodega",
+    )
+
+    stock_minimo = models.PositiveIntegerField(
+        default=0,
+        help_text="Stock mínimo recomendado",
+    )
 
     tiene_vencimiento = models.BooleanField(default=False)
     fecha_vencimiento = models.DateField(null=True, blank=True)
@@ -52,3 +59,25 @@ class Producto(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    def hay_stock(self, cantidad: int) -> bool:
+        return self.es_activo and self.stock_actual >= cantidad
+
+    def descontar_stock(self, cantidad: int):
+        if cantidad < 0:
+            raise ValueError("La cantidad a descontar no puede ser negativa.")
+
+        if not self.hay_stock(cantidad):
+            raise ValueError("No hay stock suficiente para este producto.")
+
+        self.stock_actual -= cantidad
+        self.save(update_fields=["stock_actual"])
+
+    def aumentar_stock(self, cantidad: int):
+        if cantidad < 0:
+            raise ValueError("La cantidad a aumentar no puede ser negativa.")
+
+        self.stock_actual += cantidad
+        self.save(update_fields=["stock_actual"])
+    
+    

@@ -1,7 +1,7 @@
-from django.db import models
 from decimal import Decimal
 from django.db import models
 from django.utils import timezone
+
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=150)
@@ -33,6 +33,77 @@ class Cliente(models.Model):
     es_activo = models.BooleanField(default=True)
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.nombre} ({self.rut})"
+
+    def puede_comprar_a_credito(self, monto: Decimal) -> bool:
+        """
+        Revisa si el cliente puede tomar este monto a crédito
+        sin pasarse del cupo.
+        """
+        if monto is None:
+            monto = Decimal("0.00")
+        monto = Decimal(monto)
+
+        if not self.tiene_credito or not self.es_activo:
+            return False
+
+        return (self.saldo_actual + monto) <= self.cupo_maximo
+
+    def obtener_saldo_actual(self) -> Decimal:
+        """
+        Devuelve el saldo_actual almacenado en el cliente.
+        (Lo dejamos como wrapper por si después quieres
+        cambiar la lógica y leer desde movimientos).
+        """
+        return self.saldo_actual
+
+    def registrar_movimiento_credito(self, tipo, monto, venta=None, observaciones=""):
+        """
+        Crea un MovimientoCredito y actualiza saldo_actual del cliente.
+        Esta función es la que usa Venta.save() cuando es_credito = True.
+        """
+        from .models import MovimientoCredito  # referencia al modelo de abajo
+
+        if monto is None:
+            monto = Decimal("0.00")
+        monto = Decimal(monto)
+
+        saldo_antes = self.saldo_actual
+
+        if tipo == "COMPRA":
+            # Validamos cupo antes de registrar
+            if not self.puede_comprar_a_credito(monto):
+                raise ValueError("El monto supera el cupo de crédito del cliente.")
+            saldo_despues = saldo_antes + monto
+
+        elif tipo == "ABONO":
+            saldo_despues = saldo_antes - monto
+
+        elif tipo == "AJUSTE":
+            # Interpretamos el ajuste como “fijar” el saldo en ese monto
+            saldo_despues = monto
+
+        else:
+            raise ValueError(f"Tipo de movimiento no soportado: {tipo}")
+
+        mov = MovimientoCredito.objects.create(
+            cliente=self,
+            venta=venta,
+            tipo=tipo,
+            monto=monto,
+            saldo_despues=saldo_despues,
+            fecha=timezone.now(),
+            observaciones=observaciones or "",
+        )
+
+        # Actualizamos saldo_actual del cliente
+        self.saldo_actual = saldo_despues
+        self.save(update_fields=["saldo_actual"])
+
+        return mov
+
 
 class MovimientoCredito(models.Model):
     TIPO_CHOICES = [
@@ -74,42 +145,3 @@ class MovimientoCredito(models.Model):
 
     def __str__(self):
         return f"{self.tipo} - {self.cliente.nombre} - ${self.monto}"
-
-    def save(self, *args, **kwargs):
-        """
-        Al crear un movimiento nuevo, actualiza el saldo_actual del cliente
-        y guarda en saldo_despues cómo quedó.
-        Si solo se edita un movimiento ya existente, no toca el saldo.
-        """
-        es_nuevo = self.pk is None
-
-        if es_nuevo:
-            cliente = self.cliente
-
-
-            if self.tipo == "COMPRA":
-                if not cliente.puede_comprar_a_credito(self.monto):
-                    raise ValueError("El monto supera el cupo de crédito del cliente.")
-                nuevo_saldo = cliente.saldo_actual + self.monto
-
-            elif self.tipo in ("ABONO", "AJUSTE"):
-                nuevo_saldo = cliente.saldo_actual - self.monto
-
-            else:
-                nuevo_saldo = cliente.saldo_actual
-
-            self.saldo_despues = nuevo_saldo
-
-            cliente.saldo_actual = nuevo_saldo
-            cliente.save(update_fields=["saldo_actual"])
-
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.nombre} ({self.rut})"
-
-    def puede_comprar_a_credito(self, monto: Decimal) -> bool:
-        """Revisa si con este monto no se pasa del cupo."""
-        if not self.tiene_credito or not self.es_activo:
-            return False
-        return (self.saldo_actual + monto) <= self.cupo_maximo

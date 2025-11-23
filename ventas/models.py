@@ -45,6 +45,10 @@ class Venta(models.Model):
             return f"Venta #{self.id} - {self.nombre_cliente_libre} - ${self.total}"
         return f"Venta #{self.id} - ${self.total}"
 
+    def __str__(self):
+        if self.cliente:
+            return f"Venta #{self.id} - {self.cliente.nombre} - ${self.total}"
+        return f"Venta #{self.id} - ${self.total}"
 
 class DetalleVenta(models.Model):
     venta = models.ForeignKey(

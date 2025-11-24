@@ -16,7 +16,7 @@ class Venta(models.Model):
         blank=True,
         related_name="ventas",
     )
-    
+
     nombre_cliente_libre = models.CharField(
         "Nombre cliente (libre)",
         max_length=150,
@@ -38,38 +38,77 @@ class Venta(models.Model):
         self.total = total
         self.save(update_fields=["total"])
 
+    def delete(self, *args, **kwargs):
+        """
+        Si la venta era a crédito, registra un AJUSTE para revertir
+        el efecto de la compra en el saldo del cliente.
+        Luego elimina la venta normalmente.
+        """
+        if self.es_credito and self.cliente:
+            from clientes.models import MovimientoCredito  # import local para evitar ciclos
+
+            mov_compra = MovimientoCredito.objects.filter(
+                venta=self,
+                tipo="COMPRA",
+            ).order_by("id").first()
+
+            if mov_compra is not None:
+                # Crea un AJUSTE que compense la compra
+                self.cliente.registrar_movimiento_credito(
+                    tipo="AJUSTE",
+                    monto=mov_compra.monto,
+                    venta=None,
+                    observaciones=f"Ajuste por eliminación de Venta #{self.id}",
+                )
+
+                # Marca el movimiento original como “venta eliminada”
+                texto = mov_compra.observaciones or ""
+                if "venta eliminada" not in texto.lower():
+                    mov_compra.observaciones = (texto + " (venta eliminada)").strip()
+                    mov_compra.save(update_fields=["observaciones"])
+
+        # borra la venta (y sus DetalleVenta en cascada)
+        super().delete(*args, **kwargs)
+
     def clean(self):
         """
         Validaciones de negocio para la venta.
         Se ejecuta cuando el modelo se valida (por ejemplo, en el admin).
         """
         super().clean()
+        errors = {}
 
-        # Si la venta es a crédito, debe tener cliente
         if self.es_credito:
+            # Venta a crédito → debe tener cliente registrado
             if not self.cliente:
-                raise ValidationError(
-                    {"cliente": "Debe seleccionar un cliente para una venta a crédito."}
+                errors["cliente"] = "Debe seleccionar un cliente para una venta a crédito."
+            # Y no tiene sentido rellenar el nombre libre
+            if self.nombre_cliente_libre:
+                errors["nombre_cliente_libre"] = (
+                    "En ventas a crédito use solo clientes registrados."
+                )
+        else:
+            # Venta al contado → debe haber al menos algo de info de cliente
+            if not self.cliente and not self.nombre_cliente_libre:
+                errors["cliente"] = (
+                    "Debe seleccionar un cliente registrado o escribir el nombre libre."
                 )
 
-            # Si el cliente existe pero no tiene crédito habilitado
-            if not getattr(self.cliente, "tiene_credito", False):
-                raise ValidationError(
-                    {"es_credito": "El cliente no tiene crédito habilitado."}
-                )
-
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self):
         if self.cliente:
-            return f"Venta #{self.id} - {self.cliente.nombre} - ${self.total}"
-        if self.nombre_cliente_libre:
-            return f"Venta #{self.id} - {self.nombre_cliente_libre} - ${self.total}"
+            nombre = self.cliente.nombre
+        elif self.nombre_cliente_libre:
+            nombre = self.nombre_cliente_libre
+        else:
+            nombre = ""
+
+        if nombre:
+            return f"Venta #{self.id} - {nombre} - ${self.total}"
         return f"Venta #{self.id} - ${self.total}"
 
-    def __str__(self):
-        if self.cliente:
-            return f"Venta #{self.id} - {self.cliente.nombre} - ${self.total}"
-        return f"Venta #{self.id} - ${self.total}"
 
 class DetalleVenta(models.Model):
     venta = models.ForeignKey(

@@ -13,11 +13,11 @@ class DetalleVentaInlineFormSet(BaseInlineFormSet):
         tiene_detalles_validos = False
 
         for form in self.forms:
-            # Formularios vacíos no tienen cleaned_data útil
+            # Formularios sin cleaned_data los ignora
             if not hasattr(form, "cleaned_data"):
                 continue
 
-            # Si está marcado para borrar, lo ignoramos
+            # Si está marcado para borrar, lo ignora
             if form.cleaned_data.get("DELETE"):
                 continue
 
@@ -39,13 +39,23 @@ class DetalleVentaInline(admin.TabularInline):
     formset = DetalleVentaInlineFormSet
 
 
-# 3) Admin de Venta
+# 3) Admin de Venta (ÚNICA definición)
 @admin.register(Venta)
 class VentaAdmin(admin.ModelAdmin):
     list_display = ("id", "fecha", "cliente", "total", "es_credito")
     list_filter = ("es_credito", "fecha", "cliente")
     search_fields = ("id", "cliente__nombre", "cliente__rut")
     inlines = [DetalleVentaInline]
+
+    def get_readonly_fields(self, request, obj=None):
+        """
+        Si la venta ya tiene movimientos de crédito asociados,
+        bloqueamos editar cliente y es_credito desde el admin.
+        """
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj is not None and obj.movimientos_credito.exists():
+            readonly.extend(["cliente", "es_credito"])
+        return readonly
 
     def save_related(self, request, form, formsets, change):
         """
@@ -60,12 +70,14 @@ class VentaAdmin(admin.ModelAdmin):
         venta.actualizar_total()
 
         if venta.es_credito and venta.cliente:
+            # Buscar si ya existe un movimiento COMPRA para esta venta
             mov_existente = MovimientoCredito.objects.filter(
                 venta=venta,
                 tipo="COMPRA",
             ).order_by("id").first()
 
             if mov_existente is None:
+                # No existe → creamos uno nuevo
                 venta.cliente.registrar_movimiento_credito(
                     tipo="COMPRA",
                     monto=venta.total,
@@ -73,6 +85,7 @@ class VentaAdmin(admin.ModelAdmin):
                     observaciones=f"Compra a crédito (Venta #{venta.id})",
                 )
             else:
+                # Sí existe → actualizamos el monto y el saldo
                 saldo_antes = mov_existente.saldo_despues - mov_existente.monto
                 mov_existente.monto = venta.total
                 nuevo_saldo = saldo_antes + venta.total
@@ -84,7 +97,7 @@ class VentaAdmin(admin.ModelAdmin):
                 cliente.save(update_fields=["saldo_actual"])
 
 
-# 4) Admin de DetalleVenta “normal”
+# 4) Admin de DetalleVenta
 @admin.register(DetalleVenta)
 class DetalleVentaAdmin(admin.ModelAdmin):
     list_display = ("venta", "producto", "cantidad", "precio_unitario", "subtotal")

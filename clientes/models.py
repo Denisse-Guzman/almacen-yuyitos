@@ -1,5 +1,7 @@
+# clientes/models.py
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -38,28 +40,16 @@ class Cliente(models.Model):
     def __str__(self):
         return f"{self.nombre} ({self.rut})"
 
-    # ---------- LÓGICA DE CRÉDITO EN EL CLIENTE ----------
-
-    def obtener_saldo_actual(self) -> Decimal:
-        """
-        Devuelve el saldo actual del cliente
-        leyendo el último MovimientoCredito.
-        Si no tiene movimientos, el saldo es 0.
-        """
-        ultimo = self.movimientos_credito.order_by("-fecha", "-id").first()
-        if ultimo:
-            return ultimo.saldo_despues
-        return Decimal("0.00")
+    # --- Reglas de negocio de crédito ---
 
     def puede_comprar_a_credito(self, monto: Decimal) -> bool:
         """
-        Revisa si con este monto no se pasa del cupo máximo.
+        True si el cliente puede tomar una nueva compra a crédito
+        por 'monto' sin pasarse del cupo.
         """
         if not self.tiene_credito or not self.es_activo:
             return False
-
-        saldo = self.obtener_saldo_actual()
-        return (saldo + Decimal(monto)) <= self.cupo_maximo
+        return (self.saldo_actual + monto) <= self.cupo_maximo
 
     def registrar_movimiento_credito(
         self,
@@ -69,18 +59,38 @@ class Cliente(models.Model):
         observaciones: str = "",
     ):
         """
-        Crea un MovimientoCredito, calcula el nuevo saldo
-        y actualiza también el campo saldo_actual del cliente.
+        Crea un MovimientoCredito usando este cliente como dueño.
+        Se usa desde Venta.save() para crear la COMPRA, y también
+        lo puedes llamar cuando registres abonos manuales en una vista.
         """
-        saldo_actual = self.obtener_saldo_actual()
+        from .models import MovimientoCredito  # evita import circular
 
+        monto = Decimal(monto)
+
+        # Validaciones de negocio reutilizables
         if tipo == "COMPRA":
-            nuevo_saldo = saldo_actual + Decimal(monto)
-        elif tipo in ("ABONO", "AJUSTE"):
-            nuevo_saldo = saldo_actual - Decimal(monto)
-        else:
-            raise ValueError(f"Tipo de movimiento no soportado: {tipo}")
+            if not self.puede_comprar_a_credito(monto):
+                raise ValidationError(
+                    "El monto de la compra supera el cupo disponible del cliente."
+                )
+            nuevo_saldo = self.saldo_actual + monto
 
+        elif tipo == "ABONO":
+            if monto <= 0:
+                raise ValidationError("El abono debe ser mayor que 0.")
+            if monto > self.saldo_actual:
+                raise ValidationError(
+                    "El abono no puede ser mayor que la deuda actual del cliente."
+                )
+            nuevo_saldo = self.saldo_actual - monto
+
+        elif tipo == "AJUSTE":
+            nuevo_saldo = self.saldo_actual - monto
+
+        else:
+            raise ValidationError(f"Tipo de movimiento no soportado: {tipo}")
+
+        # Crea el movimiento con el saldo_despues correcto
         mov = MovimientoCredito.objects.create(
             cliente=self,
             venta=venta,
@@ -91,7 +101,7 @@ class Cliente(models.Model):
             observaciones=observaciones,
         )
 
-        # Actualizamos el campo saldo_actual para que se vea en el admin
+        # Actualiza saldo_actual del cliente
         self.saldo_actual = nuevo_saldo
         self.save(update_fields=["saldo_actual"])
 
@@ -106,7 +116,7 @@ class MovimientoCredito(models.Model):
     ]
 
     cliente = models.ForeignKey(
-        Cliente,
+        "clientes.Cliente",
         on_delete=models.CASCADE,
         related_name="movimientos_credito",
     )
@@ -138,3 +148,48 @@ class MovimientoCredito(models.Model):
 
     def __str__(self):
         return f"{self.tipo} - {self.cliente.nombre} - ${self.monto}"
+
+    def save(self, *args, **kwargs):
+        """
+        Si se crea un movimiento directamente desde el admin,
+        también queremos actualizar el saldo del cliente aquí.
+
+        OJO: la lógica es casi la misma que en Cliente.registrar_movimiento_credito,
+        para que el comportamiento sea consistente.
+        """
+        es_nuevo = self.pk is None
+
+        if es_nuevo:
+            cliente = self.cliente
+            monto = Decimal(self.monto)
+
+            if self.tipo == "COMPRA":
+                if not cliente.puede_comprar_a_credito(monto):
+                    raise ValidationError(
+                        "El monto de la compra supera el cupo disponible del cliente."
+                    )
+                nuevo_saldo = cliente.saldo_actual + monto
+
+            elif self.tipo == "ABONO":
+                if monto <= 0:
+                    raise ValidationError("El abono debe ser mayor que 0.")
+                if monto > cliente.saldo_actual:
+                    raise ValidationError(
+                        "El abono no puede ser mayor que la deuda actual del cliente."
+                    )
+                nuevo_saldo = cliente.saldo_actual - monto
+
+            elif self.tipo == "AJUSTE":
+                nuevo_saldo = cliente.saldo_actual - monto
+
+            else:
+                raise ValidationError(f"Tipo de movimiento no soportado: {self.tipo}")
+
+            # Guardamos el saldo que deja este movimiento
+            self.saldo_despues = nuevo_saldo
+
+            # Actualizamos saldo_actual del cliente
+            cliente.saldo_actual = nuevo_saldo
+            cliente.save(update_fields=["saldo_actual"])
+
+        super().save(*args, **kwargs)

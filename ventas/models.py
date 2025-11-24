@@ -38,6 +38,27 @@ class Venta(models.Model):
         self.total = total
         self.save(update_fields=["total"])
 
+    def clean(self):
+        """
+        Validaciones de negocio para la venta.
+        Se ejecuta cuando el modelo se valida (por ejemplo, en el admin).
+        """
+        super().clean()
+
+        # Si la venta es a crédito, debe tener cliente
+        if self.es_credito:
+            if not self.cliente:
+                raise ValidationError(
+                    {"cliente": "Debe seleccionar un cliente para una venta a crédito."}
+                )
+
+            # Si el cliente existe pero no tiene crédito habilitado
+            if not getattr(self.cliente, "tiene_credito", False):
+                raise ValidationError(
+                    {"es_credito": "El cliente no tiene crédito habilitado."}
+                )
+
+
     def __str__(self):
         if self.cliente:
             return f"Venta #{self.id} - {self.cliente.nombre} - ${self.total}"

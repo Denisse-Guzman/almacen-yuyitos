@@ -1,6 +1,6 @@
 from django.urls import path
 from .api_credito import abonar_credito
-from . import api_credito
+from . import api_credito,api_clientes, api_consultas
 
 urlpatterns = [
     # Abonos
@@ -25,5 +25,21 @@ urlpatterns = [
     ),
     # Clientes con deuda
     path("creditos/deudas/", api_credito.clientes_con_deuda, name="clientes_con_deuda"),
+        # Clientes
+    path(
+        "clientes/",
+        api_clientes.lista_clientes,
+        name="lista_clientes",
+    ),
+    path(
+        "clientes/<int:cliente_id>/",
+        api_clientes.detalle_cliente,
+        name="detalle_cliente",
+    ),
+    path(
+        "clientes/crear/",
+        api_clientes.crear_cliente,
+        name="crear_cliente",
+    ),
 ]
 

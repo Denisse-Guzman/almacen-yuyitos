@@ -1,130 +1,214 @@
-import json
-from datetime import datetime
+import datetime
 from decimal import Decimal
 
+from django.db.models import Sum, Count, Q, F
+from django.db.models.functions import TruncDate
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET
 from django.utils import timezone
-from django.db.models import Sum
+from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_GET
+from django.views.decorators.csrf import csrf_exempt
 
 from .models import Venta, DetalleVenta
 
 
-@require_GET
-def reporte_ventas(request):
+def _rango_fechas(request):
     """
-    GET /api/reportes/ventas/?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
-
-    Si no se envían parámetros, usa el día de hoy.
+    Lee fecha_desde y fecha_hasta desde el querystring (YYYY-MM-DD).
+    Si no vienen, usa la fecha de hoy.
+    Devuelve (inicio_datetime, fin_datetime, fecha_desde, fecha_hasta)
     """
-    desde_str = request.GET.get("desde")
-    hasta_str = request.GET.get("hasta")
-
     hoy = timezone.localdate()
 
-    # Parseo de fechas
-    if desde_str:
-        try:
-            desde = datetime.strptime(desde_str, "%Y-%m-%d").date()
-        except ValueError:
-            return JsonResponse(
-                {"error": "Formato inválido para 'desde'. Use YYYY-MM-DD."},
-                status=400,
-            )
+    desde_str = request.GET.get("fecha_desde")
+    hasta_str = request.GET.get("fecha_hasta")
+
+    if not desde_str and not hasta_str:
+        fecha_desde = hoy
+        fecha_hasta = hoy
     else:
-        desde = hoy
+        fecha_desde = parse_date(desde_str) if desde_str else hoy
+        fecha_hasta = parse_date(hasta_str) if hasta_str else hoy
 
-    if hasta_str:
-        try:
-            hasta = datetime.strptime(hasta_str, "%Y-%m-%d").date()
-        except ValueError:
-            return JsonResponse(
-                {"error": "Formato inválido para 'hasta'. Use YYYY-MM-DD."},
-                status=400,
-            )
-    else:
-        hasta = hoy
+        if fecha_desde is None:
+            fecha_desde = hoy
+        if fecha_hasta is None:
+            fecha_hasta = hoy
 
-    if hasta < desde:
-        return JsonResponse(
-            {"error": "'hasta' no puede ser menor que 'desde'."},
-            status=400,
-        )
+    inicio_dt = datetime.datetime.combine(fecha_desde, datetime.time.min)
+    fin_dt = datetime.datetime.combine(fecha_hasta, datetime.time.max)
 
-    # Ventas del rango
-    qs = Venta.objects.filter(
-        fecha__date__gte=desde,
-        fecha__date__lte=hasta,
-    ).order_by("fecha")
+    # Aseguramos que son "aware"
+    if timezone.is_naive(inicio_dt):
+        inicio_dt = timezone.make_aware(inicio_dt)
+    if timezone.is_naive(fin_dt):
+        fin_dt = timezone.make_aware(fin_dt)
 
-    total_ventas = qs.count()
-    total_monto = sum((v.total or Decimal("0.00")) for v in qs)
+    return inicio_dt, fin_dt, fecha_desde, fecha_hasta
 
-    # Agrupar por día
-    ventas_por_dia = {}
-    for v in qs:
-        fecha_dia = v.fecha.date().isoformat()
-        data = ventas_por_dia.setdefault(
-            fecha_dia,
-            {"fecha": fecha_dia, "cantidad": 0, "total": Decimal("0.00")},
-        )
-        data["cantidad"] += 1
-        data["total"] += v.total or Decimal("0.00")
 
-    ventas_por_dia_list = [
-        {
-            "fecha": d["fecha"],
-            "cantidad": d["cantidad"],
-            "total": str(d["total"]),
-        }
-        for d in ventas_por_dia.values()
-    ]
+@csrf_exempt
+@require_GET
+def ventas_resumen(request):
+    """
+    GET /api/reportes/ventas-resumen/
+    GET /api/reportes/ventas-resumen/?fecha_desde=2025-11-01&fecha_hasta=2025-11-26
 
-    return JsonResponse(
-        {
-            "desde": desde.isoformat(),
-            "hasta": hasta.isoformat(),
-            "total_ventas": total_ventas,
-            "total_monto": str(total_monto),
-            "ventas_por_dia": ventas_por_dia_list,
-        }
+    Entrega resumen global de ventas en el rango:
+    - cantidad_ventas
+    - total_monto
+    - total_contado
+    - total_credito
+    """
+    inicio_dt, fin_dt, fecha_desde, fecha_hasta = _rango_fechas(request)
+
+    qs = Venta.objects.filter(fecha__range=(inicio_dt, fin_dt))
+
+    agregados = qs.aggregate(
+        cantidad_ventas=Count("id"),
+        total_monto=Sum("total"),
+        total_contado=Sum("total", filter=Q(es_credito=False)),
+        total_credito=Sum("total", filter=Q(es_credito=True)),
     )
 
+    # Normalizamos Decimals a string (por seguridad)
+    def _str_dec(v):
+        if v is None:
+            return "0.00"
+        if isinstance(v, Decimal):
+            return str(v)
+        return str(v)
+
+    data = {
+        "rango": {
+            "fecha_desde": fecha_desde.isoformat(),
+            "fecha_hasta": fecha_hasta.isoformat(),
+        },
+        "resumen": {
+            "cantidad_ventas": agregados["cantidad_ventas"] or 0,
+            "total_monto": _str_dec(agregados["total_monto"]),
+            "total_contado": _str_dec(agregados["total_contado"]),
+            "total_credito": _str_dec(agregados["total_credito"]),
+        },
+    }
+
+    return JsonResponse(data, status=200)
+
+
+@csrf_exempt
+@require_GET
+def ventas_por_dia(request):
+    """
+    GET /api/reportes/ventas-por-dia/
+    GET /api/reportes/ventas-por-dia/?fecha_desde=2025-11-01&fecha_hasta=2025-11-26
+
+    Devuelve una lista de días con:
+    - fecha
+    - cantidad_ventas
+    - total_monto
+    - total_contado
+    - total_credito
+    """
+    inicio_dt, fin_dt, fecha_desde, fecha_hasta = _rango_fechas(request)
+
+    qs = (
+        Venta.objects.filter(fecha__range=(inicio_dt, fin_dt))
+        .annotate(dia=TruncDate("fecha"))
+        .values("dia")
+        .annotate(
+            cantidad_ventas=Count("id"),
+            total_monto=Sum("total"),
+            total_contado=Sum("total", filter=Q(es_credito=False)),
+            total_credito=Sum("total", filter=Q(es_credito=True)),
+        )
+        .order_by("dia")
+    )
+
+    def _str_dec(v):
+        if v is None:
+            return "0.00"
+        if isinstance(v, Decimal):
+            return str(v)
+        return str(v)
+
+    resultados = []
+    for fila in qs:
+        resultados.append(
+            {
+                "fecha": fila["dia"].isoformat() if fila["dia"] else None,
+                "cantidad_ventas": fila["cantidad_ventas"] or 0,
+                "total_monto": _str_dec(fila["total_monto"]),
+                "total_contado": _str_dec(fila["total_contado"]),
+                "total_credito": _str_dec(fila["total_credito"]),
+            }
+        )
+
+    data = {
+        "rango": {
+            "fecha_desde": fecha_desde.isoformat(),
+            "fecha_hasta": fecha_hasta.isoformat(),
+        },
+        "dias": resultados,
+    }
+    return JsonResponse(data, status=200)
+
+
+@csrf_exempt
 @require_GET
 def productos_mas_vendidos(request):
     """
-    GET /api/reportes/productos-mas-vendidos/?limit=10
+    GET /api/reportes/productos-mas-vendidos/
+    GET /api/reportes/productos-mas-vendidos/?fecha_desde=2025-11-01&fecha_hasta=2025-11-26&limit=10
 
-    Devuelve los productos ordenados por cantidad vendida (DetalleVenta).
+    Devuelve top N productos por cantidad vendida en el rango.
     """
+    inicio_dt, fin_dt, fecha_desde, fecha_hasta = _rango_fechas(request)
+
     try:
         limit = int(request.GET.get("limit", "10"))
     except ValueError:
         limit = 10
 
-    if limit <= 0:
-        limit = 10
-
-    detalles = (
-        DetalleVenta.objects
-        .values("producto_id", "producto__nombre")
-        .annotate(total_cantidad=Sum("cantidad"))
-        .order_by("-total_cantidad")
+    qs = (
+        DetalleVenta.objects.filter(venta__fecha__range=(inicio_dt, fin_dt))
+        .values(
+            "producto_id",
+            "producto__nombre",
+            "producto__codigo_barras",
+        )
+        .annotate(
+            total_cantidad=Sum("cantidad"),
+            total_monto=Sum("subtotal"),
+        )
+        .order_by("-total_cantidad", "producto__nombre")
     )
 
-    results = []
-    for d in detalles[:limit]:
-        results.append(
+    qs = qs[:limit]
+
+    def _str_dec(v):
+        if v is None:
+            return "0.00"
+        if isinstance(v, Decimal):
+            return str(v)
+        return str(v)
+
+    resultados = []
+    for fila in qs:
+        resultados.append(
             {
-                "producto_id": d["producto_id"],
-                "nombre": d["producto__nombre"],
-                "cantidad_vendida": d["total_cantidad"],
+                "producto_id": fila["producto_id"],
+                "nombre": fila["producto__nombre"],
+                "codigo_barras": fila["producto__codigo_barras"],
+                "total_cantidad": fila["total_cantidad"] or 0,
+                "total_monto": _str_dec(fila["total_monto"]),
             }
         )
 
-    return JsonResponse(
-        {
-            "count": len(results),
-            "results": results,
-        }
-    )
+    data = {
+        "rango": {
+            "fecha_desde": fecha_desde.isoformat(),
+            "fecha_hasta": fecha_hasta.isoformat(),
+        },
+        "productos": resultados,
+    }
+    return JsonResponse(data, status=200)

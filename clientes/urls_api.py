@@ -23,5 +23,7 @@ urlpatterns = [
         api_credito.listar_movimientos,
         name="listar_movimientos_credito",
     ),
+    # Clientes con deuda
+    path("creditos/deudas/", api_credito.clientes_con_deuda, name="clientes_con_deuda"),
 ]
 

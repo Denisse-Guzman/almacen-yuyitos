@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import Cliente
+from .models import Cliente, MovimientoCredito
 
 
 def _obtener_cliente(data):
@@ -240,4 +240,34 @@ def listar_movimientos(request):
             "movimientos": movimientos,
         },
         status=200,
+    )
+
+@require_GET
+def clientes_con_deuda(request):
+    """
+    GET /api/creditos/deudas/
+
+    Lista los clientes con saldo_actual > 0, ordenados por deuda.
+    """
+    qs = Cliente.objects.filter(saldo_actual__gt=0).order_by("-saldo_actual")
+
+    results = []
+    for c in qs:
+        disponible = c.cupo_maximo - c.saldo_actual
+        results.append(
+            {
+                "id": c.id,
+                "nombre": c.nombre,
+                "rut": c.rut,
+                "saldo_actual": str(c.saldo_actual),
+                "cupo_maximo": str(c.cupo_maximo),
+                "disponible": str(disponible),
+            }
+        )
+
+    return JsonResponse(
+        {
+            "count": len(results),
+            "results": results,
+        }
     )

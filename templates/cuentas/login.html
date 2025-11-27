@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Login POS</title>
+</head>
+<body>
+    <h1>Login POS (versión simple)</h1>
+
+    {% if messages %}
+        <ul style="color:red;">
+            {% for message in messages %}
+                <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        <label>
+            Usuario:
+            <input type="text" name="username">
+        </label>
+        <br>
+        <label>
+            Contraseña:
+            <input type="password" name="password">
+        </label>
+        <br>
+        
+        <label>
+            Rol:
+            <select name="rol">
+                <option value="">(sin rol)</option>
+                <option value="cajero">Cajero</option>
+                <option value="bodeguero">Bodeguero</option>
+                <option value="admin">Admin</option>
+            </select>
+        </label>
+        <br><br>
+        <button type="submit">Iniciar sesión</button>
+    </form>
+</body>
+</html>

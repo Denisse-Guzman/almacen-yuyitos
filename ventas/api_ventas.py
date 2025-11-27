@@ -60,13 +60,17 @@ def crear_venta(request):
     """
     # 1) Parsear JSON
     try:
-        data = json.loads(request.body.decode("utf-8"))
+        raw_body = request.body
+        encoding = request.encoding or "utf-8"
+        try:
+            body_str = raw_body.decode(encoding)
+        except UnicodeDecodeError:
+            body_str = raw_body.decode("latin-1")
+           
+        data = json.loads(body_str)
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"error": "JSON inválido en el cuerpo de la solicitud."},
-            status=400,
-        )
-
+        return JsonResponse({"error": "JSON inválido."}, status=400)
+    
     # 2) Cliente (opcional, pero obligatorio si es crédito)
     cliente = _obtener_cliente(data)
     nombre_cliente_libre = (data.get("nombre_cliente_libre") or "").strip()

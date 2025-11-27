@@ -50,7 +50,7 @@ def detalle_producto(request, producto_id: int):
     GET /api/productos/<producto_id>/
     """
     try:
-        prod = Producto.objects.get(pk=producto_id, activo=True)
+        prod = Producto.objects.get(pk=producto_id, es_activo=True)
     except Producto.DoesNotExist:
         raise Http404("Producto no encontrado")
 
@@ -63,7 +63,7 @@ def stock_producto(request, producto_id: int):
     GET /api/productos/<producto_id>/stock/
     """
     try:
-        prod = Producto.objects.get(pk=producto_id, activo=True)
+        prod = Producto.objects.get(pk=producto_id, es_activo=True)
     except Producto.DoesNotExist:
         raise Http404("Producto no encontrado")
 

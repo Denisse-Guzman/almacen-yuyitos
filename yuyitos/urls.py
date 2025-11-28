@@ -28,5 +28,8 @@ urlpatterns = [
         #  Auth
     path("login/", cuentas_views.login_view, name="login"),
     path("logout/", cuentas_views.logout_view, name="logout"),
+    path("dashboard/caja/", cuentas_views.dashboard_caja, name="dashboard_caja"),
+    path("dashboard/bodega/", cuentas_views.dashboard_bodega, name="dashboard_bodega"),
+    path("dashboard/admin/", cuentas_views.dashboard_admin, name="dashboard_admin"),
 ]
 

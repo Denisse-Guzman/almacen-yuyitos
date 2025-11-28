@@ -1,58 +1,94 @@
-from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
-from django.shortcuts import redirect, render
-from django.views.decorators.http import require_http_methods
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.shortcuts import render, redirect
+from django.contrib import messages
+
+# Constantes de roles (en minúsculas)
+ROLE_CAJERO = "cajero"
+ROLE_BODEGUERO = "bodeguero"
+ROLE_ADMIN = "admin"
 
 
-@require_http_methods(["GET", "POST"])
 def login_view(request):
-    """
-    Vista de inicio de sesión.
-
-
-    (rol cajero / bodeguero / admin):
-    - Si GET: muestra formulario simple.
-    - Si POST: autentica usuario y redirige.
-    """
-
     if request.method == "POST":
-        username = request.POST.get("username", "").strip()
-        password = request.POST.get("password", "").strip()
-        rol = request.POST.get("rol")  # opcional, lo usaremos después
+        username = request.POST.get("username")
+        password = request.POST.get("password")
 
-        if not username or not password:
-            messages.error(request, "Debe ingresar usuario y contraseña.")
-        else:
-            user = authenticate(request, username=username, password=password)
-            if user is None:
-                messages.error(request, "Usuario o contraseña incorrectos.")
-            else:
-                # validar rol contra grupos 
-                if rol == "cajero" and not user.groups.filter(name="Cajero").exists():
-                    messages.error(request, "Este usuario no tiene rol de Cajero.")
-                elif rol == "bodeguero" and not user.groups.filter(
-                    name="Bodeguero"
-                ).exists():
-                    messages.error(request, "Este usuario no tiene rol de Bodeguero.")
-                elif rol == "admin" and not (
-                    user.is_superuser or user.groups.filter(name="Admin").exists()
-                ):
-                    messages.error(request, "Este usuario no tiene rol de Admin.")
-                else:
-                    # ✅ Autenticado y con rol correcto
-                    login(request, user)
+        # normaliza el rol a minúsculas
+        rol_seleccionado = (request.POST.get("rol") or "").strip().lower()
 
-                   
-                    return redirect("/admin/")
+        user = authenticate(request, username=username, password=password)
 
-    
+        if user is None:
+            messages.error(request, "Usuario o contraseña incorrectos.")
+            return render(request, "cuentas/login.html")
+
+        if not user.is_active:
+            messages.error(request, "Usuario inactivo.")
+            return render(request, "cuentas/login.html")
+
+        # Loguea al usuario
+        login(request, user)
+
+        # nombres de grupos del usuario en minúsculas
+        grupos = {g.lower() for g in user.groups.values_list("name", flat=True)}
+
+        # Si el usuario selecciona un rol, debe pertenecer a ese grupo
+        if rol_seleccionado and rol_seleccionado not in grupos:
+            logout(request)
+            messages.error(
+                request,
+                "No tienes permisos para ingresar como ese rol."
+            )
+            return render(request, "cuentas/login.html")
+
+        # Redirección según rol (prioridad Admin > Bodeguero > Cajero)
+        if ROLE_ADMIN in grupos:
+            return redirect("dashboard_admin")
+        elif ROLE_BODEGUERO in grupos:
+            return redirect("dashboard_bodega")
+        elif ROLE_CAJERO in grupos:
+            return redirect("dashboard_caja")
+
+        # Si llega aquí, el usuario no tiene ninguno de los 3 roles
+        logout(request)
+        messages.error(
+            request,
+            "Tu usuario no tiene un rol asignado. Contacta al administrador."
+        )
+        return render(request, "cuentas/login.html")
+
+    # GET → mostrar formulario
     return render(request, "cuentas/login.html")
 
 
+def _en_grupo(nombre_grupo):
+    def check(user):
+        return (
+            user.is_authenticated
+            and user.groups.filter(name__iexact=nombre_grupo).exists()
+        )
+    return check
+
+
+@login_required
+@user_passes_test(_en_grupo("Cajero"))
+def dashboard_caja(request):
+    return render(request, "cuentas/dashboard_caja.html")
+
+
+@login_required
+@user_passes_test(_en_grupo("Bodeguero"))
+def dashboard_bodega(request):
+    return render(request, "cuentas/dashboard_bodega.html")
+
+
+@login_required
+@user_passes_test(_en_grupo("Admin"))
+def dashboard_admin(request):
+    return render(request, "cuentas/dashboard_admin.html")
+
+
 def logout_view(request):
-    """
-    Cierra la sesión y vuelve a la pantalla de login.
-    """
     logout(request)
     return redirect("login")
-

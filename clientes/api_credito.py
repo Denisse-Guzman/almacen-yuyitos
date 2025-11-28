@@ -7,7 +7,9 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import Cliente, MovimientoCredito
 
-
+from django.contrib.auth.decorators import login_required, user_passes_test
+from cuentas.permisos import es_cajero_o_admin
+from cuentas.permisos import es_admin
 def _obtener_cliente(data):
     """
     Intenta obtener un cliente por cliente_id o rut.
@@ -32,9 +34,11 @@ def _obtener_cliente(data):
 
 
 # =========================
-# 1) ABONAR CRÉDITO (ya hecho)
+# 1) ABONAR CRÉDITO 
 # =========================
 @csrf_exempt
+@login_required
+@user_passes_test(es_cajero_o_admin)
 @require_POST
 def abonar_credito(request):
     """
@@ -96,7 +100,7 @@ def abonar_credito(request):
             observaciones=observaciones or "Abono registrado por API",
         )
     except Exception as e:
-        # Devolvemos el mensaje de error como JSON
+        # Devuelve el mensaje de error como JSON
         return JsonResponse(
             {"error": [str(e)]},
             status=400,
@@ -128,6 +132,8 @@ def abonar_credito(request):
 # 2) VER SALDO DE UN CLIENTE
 # =========================
 @csrf_exempt
+@login_required
+@user_passes_test(es_cajero_o_admin)
 @require_GET
 def ver_saldo(request):
     """
@@ -155,7 +161,7 @@ def ver_saldo(request):
             status=404,
         )
 
-    # Puedes usar cliente.saldo_actual o cliente.obtener_saldo_actual()
+    # cliente.saldo_actual o cliente.obtener_saldo_actual()
     saldo = cliente.saldo_actual
     cupo = cliente.cupo_maximo
     disponible = cupo - saldo
@@ -180,6 +186,8 @@ def ver_saldo(request):
 # 3) LISTAR MOVIMIENTOS DE CRÉDITO
 # =========================
 @csrf_exempt
+@login_required
+@user_passes_test(es_cajero_o_admin)
 @require_GET
 def listar_movimientos(request):
     """
@@ -242,7 +250,10 @@ def listar_movimientos(request):
         status=200,
     )
 
+@login_required
+@user_passes_test(es_admin)
 @require_GET
+
 def clientes_con_deuda(request):
     """
     GET /api/creditos/deudas/

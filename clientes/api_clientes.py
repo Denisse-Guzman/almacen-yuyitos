@@ -8,7 +8,12 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import Cliente
 
+from django.contrib.auth.decorators import login_required, user_passes_test
+from cuentas.permisos import es_cajero_o_admin
 
+@csrf_exempt
+@login_required
+@user_passes_test(es_cajero_o_admin)
 @require_GET
 def lista_clientes(request):
     """

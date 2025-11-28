@@ -10,6 +10,8 @@ from clientes.models import Cliente
 from inventario.models import Producto
 from .models import Venta, DetalleVenta
 
+from django.contrib.auth.decorators import login_required, user_passes_test
+from cuentas.permisos import es_cajero_o_admin
 
 def _obtener_cliente(data):
     """
@@ -34,6 +36,8 @@ def _obtener_cliente(data):
 
 
 @csrf_exempt
+@login_required
+@user_passes_test(es_cajero_o_admin)
 @require_POST
 def crear_venta(request):
     """

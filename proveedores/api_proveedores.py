@@ -8,8 +8,12 @@ from django.views.decorators.http import require_POST
 from .models import Proveedor, OrdenCompra, DetalleOrdenCompra
 from inventario.models import Producto
 
+from django.contrib.auth.decorators import login_required, user_passes_test
+from cuentas.permisos import es_bodeguero_o_admin
 
 @csrf_exempt
+@login_required
+@user_passes_test(es_bodeguero_o_admin)
 @require_POST
 def ingreso_mercaderia(request):
     """

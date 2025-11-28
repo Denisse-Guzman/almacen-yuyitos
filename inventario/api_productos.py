@@ -1,7 +1,11 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
+from django.views.decorators.csrf import csrf_exempt
+
+from django.contrib.auth.decorators import login_required, user_passes_test
 
 from .models import Producto
+from cuentas.permisos import es_cajero_o_admin, es_bodeguero_o_admin
 
 
 def _producto_a_dict(producto: Producto):
@@ -15,10 +19,21 @@ def _producto_a_dict(producto: Producto):
         "descripcion": getattr(producto, "descripcion", ""),
         "precio_venta": str(producto.precio_venta),
         "stock_actual": producto.stock_actual,
-        "activo": getattr(producto, "activo", True),
+        # En el modelo el campo es `es_activo`, la clave en el JSON la dejamos como "activo"
+        "activo": getattr(producto, "es_activo", True),
     }
 
 
+def _puede_ver_productos(user):
+    """
+    Permiso: puede ver productos si es Cajero, Bodeguero o Admin.
+    """
+    return es_cajero_o_admin(user) or es_bodeguero_o_admin(user)
+
+
+@csrf_exempt
+@login_required
+@user_passes_test(_puede_ver_productos)
 @require_GET
 def listar_productos(request):
     """
@@ -47,6 +62,9 @@ def listar_productos(request):
     )
 
 
+@csrf_exempt
+@login_required
+@user_passes_test(_puede_ver_productos)
 @require_GET
 def detalle_producto(request, producto_id: int):
     """
@@ -68,8 +86,11 @@ def detalle_producto(request, producto_id: int):
     )
 
 
+@csrf_exempt
+@login_required
+@user_passes_test(_puede_ver_productos)
 @require_GET
-def ver_stock(request, producto_id: int):
+def stock_producto(request, producto_id: int):
     """
     GET /api/productos/<producto_id>/stock/
 

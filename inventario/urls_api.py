@@ -2,24 +2,25 @@ from django.urls import path
 from . import api_productos
 
 urlpatterns = [
-    # Lista de productos, con filtro opcional ?q=
+    # GET /api/productos/
+    # GET /api/productos/?q=arroz
     path(
         "productos/",
         api_productos.listar_productos,
-        name="listar_productos",
+        name="api_productos_lista",
     ),
 
-    # Detalle de un producto
+    # GET /api/productos/<id>/
     path(
         "productos/<int:producto_id>/",
         api_productos.detalle_producto,
-        name="detalle_producto",
+        name="api_productos_detalle",
     ),
 
-    # Stock de un producto
+    # GET /api/productos/<id>/stock/
     path(
         "productos/<int:producto_id>/stock/",
-        api_productos.ver_stock,
-        name="ver_stock_producto",
+        api_productos.stock_producto,
+        name="api_productos_stock",
     ),
 ]

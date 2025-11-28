@@ -11,6 +11,8 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import Venta, DetalleVenta
 
+from django.contrib.auth.decorators import login_required, user_passes_test
+from cuentas.permisos import es_admin
 
 def _rango_fechas(request):
     """
@@ -48,6 +50,8 @@ def _rango_fechas(request):
 
 
 @csrf_exempt
+@login_required
+@user_passes_test(es_admin)
 @require_GET
 def ventas_resumen(request):
     """
@@ -71,7 +75,7 @@ def ventas_resumen(request):
         total_credito=Sum("total", filter=Q(es_credito=True)),
     )
 
-    # Normalizamos Decimals a string (por seguridad)
+    # Normaliza Decimal a string (por seguridad)
     def _str_dec(v):
         if v is None:
             return "0.00"
@@ -96,6 +100,8 @@ def ventas_resumen(request):
 
 
 @csrf_exempt
+@login_required
+@user_passes_test(es_admin)
 @require_GET
 def ventas_por_dia(request):
     """
@@ -154,6 +160,8 @@ def ventas_por_dia(request):
 
 
 @csrf_exempt
+@login_required
+@user_passes_test(es_admin)
 @require_GET
 def productos_mas_vendidos(request):
     """

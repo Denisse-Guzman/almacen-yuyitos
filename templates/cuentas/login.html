@@ -2,43 +2,340 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Login POS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Yuyitos POS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            max-width: 900px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .login-left {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            padding: 60px 40px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .login-left h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .login-left p {
+            font-size: 18px;
+            line-height: 1.6;
+            opacity: 0.9;
+        }
+
+        .features {
+            margin-top: 40px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .feature-icon {
+            font-size: 24px;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .login-right {
+            padding: 60px 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .login-header h2 {
+            color: #333;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .messages {
+            margin-bottom: 20px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .alert-error {
+            background: rgb(149, 185, 233);
+            color: rgb(140, 225, 240);
+            border: 1px solid rgb(166, 213, 245);
+        }
+
+        .alert-success {
+            background: rgb(120, 200, 206);
+            color: rgb(151, 197, 228);
+            border: 1px solid rgb(170, 214, 235);
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #7b97f1;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s;
+            background: #6f8be9;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #7390f0
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667eea' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            padding-right: 40px;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #8cacf0 0%, #5578e9 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgb(171, 189, 240);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .login-footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .login-container {
+                grid-template-columns: 1fr;
+            }
+
+            .login-left {
+                display: none;
+            }
+
+            .login-right {
+                padding: 40px 30px;
+            }
+        }
+
+        /* Animación de entrada */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-container {
+            animation: fadeInUp 0.6s ease-out;
+        }
+    </style>
 </head>
 <body>
-    <h1>Login POS (versión simple)</h1>
+    <div class="login-container">
+        <!-- Lado izquierdo - Información -->
+        <div class="login-left">
+            <h1>🏪 Yuyitos</h1>
+            <p>Sistema de Punto de Venta. Gestiona ventas, inventario, clientes y créditos de forma simple y eficiente.</p>
+            
+            <div class="features">
+                <div class="feature-item">
+                    <div class="feature-icon">💰</div>
+                    <div>
+                        <strong>Ventas Rápidas</strong>
+                        <p style="font-size: 13px; opacity: 0.8;">Procesa ventas al contado y a crédito</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">📦</div>
+                    <div>
+                        <strong>Control de Stock</strong>
+                        <p style="font-size: 13px; opacity: 0.8;">Gestión automática de inventario</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">👥</div>
+                    <div>
+                        <strong>Gestión de Clientes</strong>
+                        <p style="font-size: 13px; opacity: 0.8;">Administra créditos y cupos</p>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-    {% if messages %}
-        <ul style="color:red;">
-            {% for message in messages %}
-                <li>{{ message }}</li>
-            {% endfor %}
-        </ul>
-    {% endif %}
+        <!-- Lado derecho - Formulario -->
+        <div class="login-right">
+            <div class="login-header">
+                <h2>Iniciar Sesión</h2>
+                <p>Ingresa tus credenciales para acceder</p>
+            </div>
 
-    <form method="post">
-        {% csrf_token %}
-        <label>
-            Usuario:
-            <input type="text" name="username">
-        </label>
-        <br>
-        <label>
-            Contraseña:
-            <input type="password" name="password">
-        </label>
-        <br>
-        
-        <label>
-            Rol:
-            <select name="rol">
-                <option value="">(sin rol)</option>
-                <option value="cajero">Cajero</option>
-                <option value="bodeguero">Bodeguero</option>
-                <option value="admin">Admin</option>
-            </select>
-        </label>
-        <br><br>
-        <button type="submit">Iniciar sesión</button>
-    </form>
+            {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{% url 'login' %}">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label for="username">👤 Usuario</label>
+                    <input 
+                        type="text" 
+                        id="username"
+                        name="username" 
+                        placeholder="Ingresa tu usuario"
+                        required 
+                        autofocus
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="password">🔒 Contraseña</label>
+                    <input 
+                        type="password"
+                        id="password" 
+                        name="password" 
+                        placeholder="Ingresa tu contraseña"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="rol">🎭 Rol</label>
+                    <select name="rol" id="rol">
+                        <option value="cajero">Cajero</option>
+                        <option value="bodeguero">Bodeguero</option>
+                        <option value="admin">Administrador</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-login">
+                    Iniciar Sesión →
+                </button>
+            </form>
+
+            <div class="login-footer">
+                <p>© 2025 Yuyitos POS. Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Animación suave al cargar
+        document.addEventListener('DOMContentLoaded', function() {
+            const inputs = document.querySelectorAll('input, select');
+            inputs.forEach((input, index) => {
+                input.style.opacity = '0';
+                input.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    input.style.transition = 'all 0.4s ease-out';
+                    input.style.opacity = '1';
+                    input.style.transform = 'translateY(0)';
+                }, 100 * index);
+            });
+        });
+
+        // Auto-dismiss alerts después de 5 segundos
+        setTimeout(() => {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                alert.style.transition = 'opacity 0.5s';
+                alert.style.opacity = '0';
+                setTimeout(() => alert.remove(), 500);
+            });
+        }, 5000);
+    </script>
 </body>
 </html>

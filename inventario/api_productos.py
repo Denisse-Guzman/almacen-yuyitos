@@ -37,8 +37,6 @@ def _puede_ver_productos(user):
 @require_GET
 def listar_productos(request):
     """
-    GET /api/productos/
-    GET /api/productos/?q=arroz
 
     Lista productos, opcionalmente filtrando por nombre con ?q=
     """
@@ -68,7 +66,6 @@ def listar_productos(request):
 @require_GET
 def detalle_producto(request, producto_id: int):
     """
-    GET /api/productos/<producto_id>/
 
     Devuelve la info de un producto específico.
     """
@@ -92,7 +89,7 @@ def detalle_producto(request, producto_id: int):
 @require_GET
 def stock_producto(request, producto_id: int):
     """
-    GET /api/productos/<producto_id>/stock/
+
 
     Devuelve solo info de stock (útil para el POS).
     """

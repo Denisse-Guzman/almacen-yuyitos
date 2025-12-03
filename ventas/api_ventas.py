@@ -43,7 +43,7 @@ def crear_venta(request):
     """
     Crea una venta (contado o crédito) con sus detalles.
 
-    POST /api/ventas/crear/
+  
 
     JSON esperado:
 

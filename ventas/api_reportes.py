@@ -105,8 +105,6 @@ def ventas_resumen(request):
 @require_GET
 def ventas_por_dia(request):
     """
-    GET /api/reportes/ventas-por-dia/
-    GET /api/reportes/ventas-por-dia/?fecha_desde=2025-11-01&fecha_hasta=2025-11-26
 
     Devuelve una lista de días con:
     - fecha
@@ -165,8 +163,7 @@ def ventas_por_dia(request):
 @require_GET
 def productos_mas_vendidos(request):
     """
-    GET /api/reportes/productos-mas-vendidos/
-    GET /api/reportes/productos-mas-vendidos/?fecha_desde=2025-11-01&fecha_hasta=2025-11-26&limit=10
+
 
     Devuelve top N productos por cantidad vendida en el rango.
     """

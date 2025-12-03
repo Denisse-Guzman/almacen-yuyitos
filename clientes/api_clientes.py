@@ -17,8 +17,6 @@ from cuentas.permisos import es_cajero_o_admin
 @require_GET
 def lista_clientes(request):
     """
-    GET /api/clientes/
-    GET /api/clientes/?q=texto&limit=20&offset=0
 
     Lista clientes activos, con búsqueda opcional por nombre, RUT o teléfono.
     """
@@ -70,7 +68,6 @@ def lista_clientes(request):
 @require_GET
 def detalle_cliente(request, cliente_id):
     """
-    GET /api/clientes/<id>/
 
     Devuelve el detalle de un cliente.
     """
@@ -112,7 +109,6 @@ def detalle_cliente(request, cliente_id):
 @require_POST
 def crear_cliente(request):
     """
-    POST /api/clientes/crear/
 
     Body JSON:
     {

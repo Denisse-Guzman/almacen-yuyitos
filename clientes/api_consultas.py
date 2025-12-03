@@ -10,8 +10,6 @@ from .api_credito import _obtener_cliente
 @require_GET
 def obtener_saldo_cliente(request):
     """
-    GET /api/creditos/saldo/?cliente_id=1
-    GET /api/creditos/saldo/?rut=22.567.746-2
 
     Devuelve saldo_actual y disponible del cliente.
     """
@@ -52,8 +50,6 @@ def obtener_saldo_cliente(request):
 @require_GET
 def listar_movimientos_credito(request):
     """
-    GET /api/creditos/movimientos/?cliente_id=1&limit=10
-    GET /api/creditos/movimientos/?rut=22.567.746-2&limit=20
 
     Lista los últimos movimientos de crédito de un cliente.
     """

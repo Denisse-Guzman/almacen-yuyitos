@@ -139,9 +139,6 @@ def ver_saldo(request):
     """
     Consulta el saldo y cupo de un cliente.
 
-    GET /api/creditos/saldo/?cliente_id=1
-    ó
-    GET /api/creditos/saldo/?rut=12.345.678-9
     """
     data = {
         "cliente_id": request.GET.get("cliente_id"),
@@ -193,9 +190,6 @@ def listar_movimientos(request):
     """
     Lista los movimientos de crédito de un cliente.
 
-    GET /api/creditos/movimientos/?cliente_id=1&limit=20
-    ó
-    GET /api/creditos/movimientos/?rut=12.345.678-9
     """
     data = {
         "cliente_id": request.GET.get("cliente_id"),
@@ -256,7 +250,6 @@ def listar_movimientos(request):
 
 def clientes_con_deuda(request):
     """
-    GET /api/creditos/deudas/
 
     Lista los clientes con saldo_actual > 0, ordenados por deuda.
     """

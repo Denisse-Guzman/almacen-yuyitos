@@ -19,8 +19,6 @@ def _producto_to_dict(prod: Producto):
 @require_GET
 def lista_productos(request):
     """
-    GET /api/productos/
-    GET /api/productos/?q=texto
 
     Lista productos activos, con filtro opcional por nombre o descripción.
     """
@@ -46,9 +44,7 @@ def lista_productos(request):
 
 @require_GET
 def detalle_producto(request, producto_id: int):
-    """
-    GET /api/productos/<producto_id>/
-    """
+
     try:
         prod = Producto.objects.get(pk=producto_id, es_activo=True)
     except Producto.DoesNotExist:
@@ -59,9 +55,7 @@ def detalle_producto(request, producto_id: int):
 
 @require_GET
 def stock_producto(request, producto_id: int):
-    """
-    GET /api/productos/<producto_id>/stock/
-    """
+
     try:
         prod = Producto.objects.get(pk=producto_id, es_activo=True)
     except Producto.DoesNotExist:

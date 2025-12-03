@@ -17,7 +17,7 @@ from cuentas.permisos import es_bodeguero_o_admin
 @require_POST
 def ingreso_mercaderia(request):
     """
-    POST /api/proveedores/ingreso-mercaderia/
+
 
     JSON esperado:
 

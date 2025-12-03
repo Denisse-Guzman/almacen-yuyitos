@@ -1223,7 +1223,7 @@
         <section id="credits-section" class="section">
             <div class="credits-header">
                 <h1 class="section-title">Clientes con Crédito Interno</h1>
-                <button class="btn-primary" onclick="alert('Función disponible próximamente')">
+                <button class="btn-primary" onclick="openNewClientModal()">
                     <span>➕</span>
                     <span>Nuevo Cliente</span>
                 </button>
@@ -1403,6 +1403,79 @@
                 </button>
                 <button class="btn-modal btn-confirm blue" onclick="processCreditSale()">
                     Procesar Venta a Crédito
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Client Modal -->
+    <div class="modal-overlay" id="new-client-modal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <div class="modal-title">👤 Nuevo Cliente</div>
+                <button class="btn-close" onclick="closeModal('new-client-modal')">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="new-client-form" onsubmit="submitNewClient(event)">
+                    <div class="form-group">
+                        <label class="form-label">Nombre Completo *</label>
+                        <input type="text" class="form-input" id="client-nombre" 
+                               placeholder="Ej: Juan Pérez" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">RUT *</label>
+                        <input type="text" class="form-input" id="client-rut" 
+                               placeholder="Ej: 12.345.678-9" required>
+                    </div>
+
+                    <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">Teléfono</label>
+                            <input type="text" class="form-input" id="client-telefono" 
+                                   placeholder="Ej: 912345678">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-input" id="client-email" 
+                                   placeholder="Ej: correo@ejemplo.cl">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Dirección</label>
+                        <textarea class="form-textarea" id="client-direccion" 
+                                  placeholder="Dirección completa..." rows="2"></textarea>
+                    </div>
+
+                    <div class="form-group" style="border-top: 1px solid var(--gray-200); padding-top: 1rem; margin-top: 1rem;">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="client-tiene-credito" 
+                                   onchange="toggleCreditoFields()" 
+                                   style="width: auto; cursor: pointer;">
+                            <span>¿Otorgar crédito interno?</span>
+                        </label>
+                    </div>
+
+                    <div id="credito-fields" style="display: none; padding-left: 1.5rem;">
+                        <div class="form-group">
+                            <label class="form-label">Cupo Máximo de Crédito *</label>
+                            <input type="number" class="form-input" id="client-cupo-maximo" 
+                                   placeholder="0" step="1000" min="0" value="0">
+                            <small style="color: var(--gray-600); display: block; margin-top: 0.25rem;">
+                                Monto máximo que el cliente puede deber
+                            </small>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal btn-cancel" onclick="closeModal('new-client-modal')">
+                    Cancelar
+                </button>
+                <button class="btn-modal btn-confirm" onclick="document.getElementById('new-client-form').requestSubmit()">
+                    Crear Cliente
                 </button>
             </div>
         </div>
@@ -1762,7 +1835,9 @@
             }
             
             tbody.innerHTML = clients.map(c => {
-                const deuda = c.cupo_maximo - c.saldo_actual;
+                const deuda = parseFloat(c.saldo_actual || 0); // saldo_actual ES la deuda actual
+                const cupoMaximo = parseFloat(c.cupo_maximo || 0);
+                const disponible = cupoMaximo - deuda; // disponible es lo que puede usar
                 const isActive = c.es_activo && c.tiene_credito;
                 
                 return `
@@ -1772,9 +1847,9 @@
                             <div class="client-phone">${c.telefono || 'Sin teléfono'}</div>
                         </td>
                         <td>${c.rut || 'Sin RUT'}</td>
-                        <td>${formatMoney(c.cupo_maximo)}</td>
-                        <td>${formatMoney(deuda)}<br><small>${Math.round((deuda / c.cupo_maximo) * 100)}% usado</small></td>
-                        <td>${formatMoney(c.saldo_actual)}</td>
+                        <td>${formatMoney(cupoMaximo)}</td>
+                        <td>${formatMoney(deuda)}<br><small>${cupoMaximo > 0 ? Math.round((deuda / cupoMaximo) * 100) : 0}% usado</small></td>
+                        <td>${formatMoney(disponible)}</td>
                         <td>
                             <span class="badge ${isActive ? 'badge-success' : 'badge-danger'}">
                                 ${isActive ? 'Activo' : 'Suspendido'}
@@ -1802,8 +1877,8 @@
         // Update stats
         function updateStats() {
             const totalClients = app.clients.length;
-            const totalCredit = app.clients.reduce((sum, c) => sum + c.cupo_maximo, 0);
-            const totalDebt = app.clients.reduce((sum, c) => sum + (c.cupo_maximo - c.saldo_actual), 0);
+            const totalCredit = app.clients.reduce((sum, c) => sum + parseFloat(c.cupo_maximo || 0), 0);
+            const totalDebt = app.clients.reduce((sum, c) => sum + parseFloat(c.saldo_actual || 0), 0); // saldo_actual ES la deuda
             const suspended = app.clients.filter(c => !c.es_activo || !c.tiene_credito).length;
 
             document.getElementById('stat-total-clients').textContent = totalClients;
@@ -1839,8 +1914,11 @@
 
         // Render client detail
         function renderClientDetail(client, movements) {
-            const deuda = client.cupo_maximo - client.saldo_actual;
-            const usagePercent = (deuda / client.cupo_maximo) * 100;
+            const deuda = parseFloat(client.saldo_actual || 0); // saldo_actual ES la deuda actual
+            const cupoMaximo = parseFloat(client.cupo_maximo || 0);
+            const disponible = cupoMaximo - deuda; // disponible es lo que puede usar
+            const usagePercent = cupoMaximo > 0 ? (deuda / cupoMaximo) * 100 : 0; // porcentaje de deuda sobre el cupo
+
             const progressClass = usagePercent > 80 ? 'danger' : usagePercent > 50 ? 'warning' : '';
 
             const detailHTML = `
@@ -1859,7 +1937,7 @@
 
                 <div class="detail-section">
                     <div class="detail-label">Límite de Crédito</div>
-                    <div class="detail-value">${formatMoney(client.cupo_maximo)}</div>
+                    <div class="detail-value">${formatMoney(cupoMaximo)}</div>
                 </div>
 
                 <div class="detail-section">
@@ -1869,7 +1947,7 @@
 
                 <div class="detail-section">
                     <div class="detail-label">Crédito Disponible</div>
-                    <div class="detail-value">${formatMoney(client.saldo_actual)}</div>
+                    <div class="detail-value">${formatMoney(disponible)}</div>
                     <div class="credit-progress">
                         <div class="progress-label">
                             <span>Uso del crédito</span>
@@ -1916,7 +1994,7 @@
             if (!client) return;
 
             app.selectedClient = client;
-            const deuda = client.cupo_maximo - client.saldo_actual;
+            const deuda = parseFloat(client.saldo_actual || 0); // saldo_actual ES la deuda actual
 
             const clientInfoHTML = `
                 <div class="modal-client-name">${client.nombre}</div>
@@ -1995,14 +2073,16 @@
             if (!client) return;
 
             app.selectedClient = client;
-            const deuda = client.cupo_maximo - client.saldo_actual;
+            const deuda = parseFloat(client.saldo_actual || 0); // saldo_actual ES la deuda actual
+            const cupoMaximo = parseFloat(client.cupo_maximo || 0);
+            const disponible = cupoMaximo - deuda; // disponible es lo que puede usar
 
             const clientInfoHTML = `
                 <div class="modal-client-name">${client.nombre}</div>
                 <div class="modal-client-details">
                     <div class="modal-detail-item">
                         <span class="modal-detail-label">Límite de Crédito</span>
-                        <span class="modal-detail-value">${formatMoney(client.cupo_maximo)}</span>
+                        <span class="modal-detail-value">${formatMoney(cupoMaximo)}</span>
                     </div>
                     <div class="modal-detail-item">
                         <span class="modal-detail-label">Deuda Actual</span>
@@ -2010,7 +2090,7 @@
                     </div>
                     <div class="modal-detail-item">
                         <span class="modal-detail-label">Crédito Disponible</span>
-                        <span class="modal-detail-value" style="color: var(--success);">${formatMoney(client.saldo_actual)}</span>
+                        <span class="modal-detail-value" style="color: var(--success);">${formatMoney(disponible)}</span>
                     </div>
                 </div>
             `;
@@ -2062,8 +2142,11 @@
             }
 
             const total = app.cart.reduce((sum, item) => sum + (item.product.precio_venta * item.quantity), 0) * 1.19;
+            const cupoMaximo = parseFloat(app.selectedClient.cupo_maximo || 0);
+            const deuda = parseFloat(app.selectedClient.saldo_actual || 0);
+            const disponible = cupoMaximo - deuda; // disponible es lo que puede usar
             
-            if (total > app.selectedClient.saldo_actual) {
+            if (total > disponible) {
                 showToast('El cliente no tiene crédito suficiente', 'error');
                 return;
             }
@@ -2119,6 +2202,92 @@
 
         function closeModal(modalId) {
             document.getElementById(modalId).classList.remove('show');
+        }
+
+        // New Client Modal functions
+        function openNewClientModal() {
+            document.getElementById('new-client-form').reset();
+            document.getElementById('credito-fields').style.display = 'none';
+            openModal('new-client-modal');
+        }
+
+        function toggleCreditoFields() {
+            const checkbox = document.getElementById('client-tiene-credito');
+            const fields = document.getElementById('credito-fields');
+            const cupoInput = document.getElementById('client-cupo-maximo');
+            
+            if (checkbox.checked) {
+                fields.style.display = 'block';
+                cupoInput.required = true;
+            } else {
+                fields.style.display = 'none';
+                cupoInput.required = false;
+                cupoInput.value = '0';
+            }
+        }
+
+        async function submitNewClient(event) {
+            event.preventDefault();
+
+            const nombre = document.getElementById('client-nombre').value.trim();
+            const rut = document.getElementById('client-rut').value.trim();
+            const telefono = document.getElementById('client-telefono').value.trim();
+            const email = document.getElementById('client-email').value.trim();
+            const direccion = document.getElementById('client-direccion').value.trim();
+            const tieneCredito = document.getElementById('client-tiene-credito').checked;
+            const cupoMaximo = tieneCredito ? document.getElementById('client-cupo-maximo').value : '0';
+
+            if (!nombre) {
+                showToast('El nombre es obligatorio', 'error');
+                return;
+            }
+
+            if (!rut) {
+                showToast('El RUT es obligatorio', 'error');
+                return;
+            }
+
+            if (tieneCredito && (!cupoMaximo || parseFloat(cupoMaximo) <= 0)) {
+                showToast('Debe ingresar un cupo máximo válido', 'error');
+                return;
+            }
+
+            const clientData = {
+                nombre: nombre,
+                rut: rut,
+                telefono: telefono,
+                email: email,
+                direccion: direccion,
+                tiene_credito: tieneCredito,
+                cupo_maximo: cupoMaximo
+            };
+
+            try {
+                const response = await fetch('/api/clientes/crear/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken
+                    },
+                    body: JSON.stringify(clientData)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Error al crear el cliente');
+                }
+
+                showToast('✓ Cliente creado exitosamente', 'success');
+                closeModal('new-client-modal');
+                
+                // Recargar lista de clientes
+                await loadClients();
+
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+                console.error(error);
+            }
         }
 
         // Logout

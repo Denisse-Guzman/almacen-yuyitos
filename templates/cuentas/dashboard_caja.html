@@ -1481,6 +1481,99 @@
         </div>
     </div>
 
+    <!-- Edit Client Modal -->
+    <div class="modal-overlay" id="edit-client-modal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <div class="modal-title">✏️ Editar Cliente</div>
+                <button class="btn-close" onclick="closeModal('edit-client-modal')">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-client-form" onsubmit="submitEditClient(event)">
+                    <input type="hidden" id="edit-client-id">
+                    
+                    <div class="form-group">
+                        <label class="form-label">Nombre Completo *</label>
+                        <input type="text" class="form-input" id="edit-client-nombre" 
+                               placeholder="Ej: Juan Pérez" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">RUT</label>
+                        <input type="text" class="form-input" id="edit-client-rut" 
+                               placeholder="Ej: 12.345.678-9" disabled 
+                               style="background: var(--gray-100); cursor: not-allowed;">
+                        <small style="color: var(--gray-600); display: block; margin-top: 0.25rem;">
+                            El RUT no se puede modificar
+                        </small>
+                    </div>
+
+                    <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">Teléfono</label>
+                            <input type="text" class="form-input" id="edit-client-telefono" 
+                                   placeholder="Ej: 912345678">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-input" id="edit-client-email" 
+                                   placeholder="Ej: correo@ejemplo.cl">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Dirección</label>
+                        <textarea class="form-textarea" id="edit-client-direccion" 
+                                  placeholder="Dirección completa..." rows="2"></textarea>
+                    </div>
+
+                    <div class="form-group" style="border-top: 1px solid var(--gray-200); padding-top: 1rem; margin-top: 1rem;">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="edit-client-tiene-credito" 
+                                   onchange="toggleEditCreditoFields()" 
+                                   style="width: auto; cursor: pointer;">
+                            <span>¿Cliente tiene crédito interno?</span>
+                        </label>
+                    </div>
+
+                    <div id="edit-credito-fields" style="display: none; padding-left: 1.5rem;">
+                        <div class="form-group">
+                            <label class="form-label">Cupo Máximo de Crédito *</label>
+                            <input type="number" class="form-input" id="edit-client-cupo-maximo" 
+                                   placeholder="0" step="1000" min="0" value="0">
+                            <small style="color: var(--gray-600); display: block; margin-top: 0.25rem;">
+                                Monto máximo que el cliente puede deber
+                            </small>
+                            <small id="edit-deuda-actual-info" style="color: var(--danger); display: none; margin-top: 0.5rem;">
+                                <!-- Se mostrará dinámicamente si hay deuda -->
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="border-top: 1px solid var(--gray-200); padding-top: 1rem; margin-top: 1rem;">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="edit-client-es-activo" 
+                                   style="width: auto; cursor: pointer;">
+                            <span>Cliente activo</span>
+                        </label>
+                        <small style="color: var(--gray-600); display: block; margin-top: 0.25rem;">
+                            Los clientes inactivos no pueden realizar compras a crédito
+                        </small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal btn-cancel" onclick="closeModal('edit-client-modal')">
+                    Cancelar
+                </button>
+                <button class="btn-modal btn-confirm" onclick="document.getElementById('edit-client-form').requestSubmit()">
+                    Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div id="toast" class="toast"></div>
 
@@ -1904,7 +1997,7 @@
             try {
                 const response = await fetch(`/api/creditos/movimientos/?cliente_id=${clientId}&limit=10`);
                 const data = await response.json();
-                const movements = data.results || [];
+                const movements = data.movimientos || []; // Corregido: el endpoint devuelve "movimientos", no "results"
 
                 renderClientDetail(client, movements);
             } catch (error) {
@@ -1966,7 +2059,7 @@
                     <button class="btn-detail btn-blue" onclick="openCreditSaleModal(${client.id})">
                         🛒 Nueva Venta a Crédito
                     </button>
-                    <button class="btn-detail btn-secondary" onclick="alert('Función disponible próximamente')">
+                    <button class="btn-detail btn-secondary" onclick="openEditClientModal(${client.id})">
                         ✏️ Editar Cliente
                     </button>
                 </div>
@@ -2283,6 +2376,121 @@
                 
                 // Recargar lista de clientes
                 await loadClients();
+
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+                console.error(error);
+            }
+        }
+
+        // Edit Client Modal functions
+        function openEditClientModal(clientId) {
+            const client = app.clients.find(c => c.id === clientId);
+            if (!client) return;
+
+            // Cargar datos del cliente en el formulario
+            document.getElementById('edit-client-id').value = client.id;
+            document.getElementById('edit-client-nombre').value = client.nombre;
+            document.getElementById('edit-client-rut').value = client.rut;
+            document.getElementById('edit-client-telefono').value = client.telefono || '';
+            document.getElementById('edit-client-email').value = client.email || '';
+            document.getElementById('edit-client-direccion').value = client.direccion || '';
+            document.getElementById('edit-client-tiene-credito').checked = client.tiene_credito;
+            document.getElementById('edit-client-cupo-maximo').value = parseFloat(client.cupo_maximo || 0);
+            document.getElementById('edit-client-es-activo').checked = client.es_activo;
+
+            // Mostrar/ocultar campos de crédito
+            const deuda = parseFloat(client.saldo_actual || 0);
+            const fields = document.getElementById('edit-credito-fields');
+            const deudaInfo = document.getElementById('edit-deuda-actual-info');
+            
+            if (client.tiene_credito) {
+                fields.style.display = 'block';
+                if (deuda > 0) {
+                    deudaInfo.style.display = 'block';
+                    deudaInfo.innerHTML = `⚠️ El cliente tiene una deuda actual de ${formatMoney(deuda)}. El cupo no puede ser menor a este monto.`;
+                } else {
+                    deudaInfo.style.display = 'none';
+                }
+            } else {
+                fields.style.display = 'none';
+            }
+
+            openModal('edit-client-modal');
+        }
+
+        function toggleEditCreditoFields() {
+            const checkbox = document.getElementById('edit-client-tiene-credito');
+            const fields = document.getElementById('edit-credito-fields');
+            const cupoInput = document.getElementById('edit-client-cupo-maximo');
+            
+            if (checkbox.checked) {
+                fields.style.display = 'block';
+                cupoInput.required = true;
+            } else {
+                fields.style.display = 'none';
+                cupoInput.required = false;
+            }
+        }
+
+        async function submitEditClient(event) {
+            event.preventDefault();
+
+            const clientId = document.getElementById('edit-client-id').value;
+            const nombre = document.getElementById('edit-client-nombre').value.trim();
+            const telefono = document.getElementById('edit-client-telefono').value.trim();
+            const email = document.getElementById('edit-client-email').value.trim();
+            const direccion = document.getElementById('edit-client-direccion').value.trim();
+            const tieneCredito = document.getElementById('edit-client-tiene-credito').checked;
+            const cupoMaximo = document.getElementById('edit-client-cupo-maximo').value;
+            const esActivo = document.getElementById('edit-client-es-activo').checked;
+
+            if (!nombre) {
+                showToast('El nombre es obligatorio', 'error');
+                return;
+            }
+
+            if (tieneCredito && (!cupoMaximo || parseFloat(cupoMaximo) <= 0)) {
+                showToast('Debe ingresar un cupo máximo válido', 'error');
+                return;
+            }
+
+            const clientData = {
+                nombre: nombre,
+                telefono: telefono,
+                email: email,
+                direccion: direccion,
+                tiene_credito: tieneCredito,
+                cupo_maximo: cupoMaximo,
+                es_activo: esActivo
+            };
+
+            try {
+                const response = await fetch(`/api/clientes/${clientId}/actualizar/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken
+                    },
+                    body: JSON.stringify(clientData)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Error al actualizar el cliente');
+                }
+
+                showToast('✓ Cliente actualizado exitosamente', 'success');
+                closeModal('edit-client-modal');
+                
+                // Recargar lista de clientes
+                await loadClients();
+                
+                // Si es el cliente seleccionado, actualizar su vista
+                if (app.selectedClient && app.selectedClient.id == clientId) {
+                    selectClient(clientId);
+                }
 
             } catch (error) {
                 showToast('Error: ' + error.message, 'error');

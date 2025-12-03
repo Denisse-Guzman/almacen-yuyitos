@@ -25,7 +25,8 @@ urlpatterns = [
     ),
     # Clientes con deuda
     path("creditos/deudas/", api_credito.clientes_con_deuda, name="clientes_con_deuda"),
-        # Clientes
+    
+    # Clientes
     path(
         "clientes/",
         api_clientes.lista_clientes,
@@ -41,5 +42,10 @@ urlpatterns = [
         api_clientes.crear_cliente,
         name="crear_cliente",
     ),
+    # NUEVA RUTA: Actualizar cliente
+    path(
+        "clientes/<int:cliente_id>/actualizar/",
+        api_clientes.actualizar_cliente,
+        name="actualizar_cliente",
+    ),
 ]
-

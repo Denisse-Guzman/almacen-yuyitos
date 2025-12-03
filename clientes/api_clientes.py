@@ -207,3 +207,117 @@ def crear_cliente(request):
         status=201,
     )
 
+@csrf_exempt
+@login_required
+@user_passes_test(es_cajero_o_admin)
+@require_POST
+def actualizar_cliente(request, cliente_id):
+    """
+    Actualiza los datos de un cliente existente.
+    
+    PUT/POST /api/clientes/<cliente_id>/actualizar/
+    
+    Body JSON:
+    {
+        "nombre": "Juan Pérez",
+        "telefono": "999999999",
+        "email": "correo@ejemplo.cl",
+        "direccion": "Dirección X",
+        "tiene_credito": true,
+        "cupo_maximo": "200000",
+        "es_activo": true
+    }
+    """
+    try:
+        cliente = Cliente.objects.get(pk=cliente_id)
+    except Cliente.DoesNotExist:
+        return JsonResponse(
+            {"error": "Cliente no encontrado."},
+            status=404,
+        )
+    
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"error": "JSON inválido en el cuerpo de la solicitud."},
+            status=400,
+        )
+
+    # Actualizar campos básicos
+    nombre = (data.get("nombre") or "").strip()
+    if nombre:
+        cliente.nombre = nombre
+    
+    telefono = data.get("telefono")
+    if telefono is not None:
+        cliente.telefono = telefono.strip()
+    
+    email = data.get("email")
+    if email is not None:
+        cliente.email = email.strip()
+    
+    direccion = data.get("direccion")
+    if direccion is not None:
+        cliente.direccion = direccion.strip()
+    
+    # Actualizar estado activo
+    if "es_activo" in data:
+        cliente.es_activo = bool(data.get("es_activo"))
+    
+    # Actualizar crédito
+    if "tiene_credito" in data:
+        tiene_credito = bool(data.get("tiene_credito"))
+        cliente.tiene_credito = tiene_credito
+        
+        if tiene_credito and "cupo_maximo" in data:
+            cupo_raw = data.get("cupo_maximo")
+            try:
+                cupo_maximo = Decimal(str(cupo_raw))
+            except (InvalidOperation, TypeError):
+                return JsonResponse(
+                    {"error": "El campo 'cupo_maximo' debe ser un número válido."},
+                    status=400,
+                )
+            
+            if cupo_maximo < 0:
+                return JsonResponse(
+                    {"error": "El cupo máximo no puede ser negativo."},
+                    status=400,
+                )
+            
+            # Validar que el nuevo cupo no sea menor al saldo actual
+            if cupo_maximo < cliente.saldo_actual:
+                return JsonResponse(
+                    {"error": f"El cupo máximo no puede ser menor a la deuda actual (${cliente.saldo_actual})."},
+                    status=400,
+                )
+            
+            cliente.cupo_maximo = cupo_maximo
+    
+    cliente.save()
+    
+    # Preparar respuesta
+    disponible = cliente.cupo_maximo - cliente.saldo_actual if cliente.tiene_credito else Decimal("0.00")
+    
+    data_resp = {
+        "id": cliente.id,
+        "nombre": cliente.nombre,
+        "rut": cliente.rut,
+        "telefono": cliente.telefono,
+        "email": cliente.email,
+        "direccion": cliente.direccion,
+        "tiene_credito": cliente.tiene_credito,
+        "cupo_maximo": str(cliente.cupo_maximo),
+        "saldo_actual": str(cliente.saldo_actual),
+        "disponible": str(disponible),
+        "es_activo": cliente.es_activo,
+    }
+    
+    return JsonResponse(
+        {
+            "mensaje": "Cliente actualizado correctamente.",
+            "cliente": data_resp,
+        },
+        status=200,
+    )

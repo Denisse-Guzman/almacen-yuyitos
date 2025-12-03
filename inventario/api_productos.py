@@ -137,7 +137,7 @@ def crear_producto(request):
         "codigo_barras": "123456",
         "nombre": "Coca Cola 2.0 lt",
         "descripcion": "Bebida gaseosa",
-        "categoria_id": 1,
+        "categoria_nombre": "Bebidas",  // Ahora es nombre de categoría
         "precio_compra": "1000",
         "precio_venta": "1800",
         "stock_actual": 50,
@@ -202,16 +202,17 @@ def crear_producto(request):
             status=400,
         )
 
-    # Crear producto
-    from inventario.models import Categoria  # Importar si no está
+    # Manejar categoría por nombre (crear si no existe)
+    from inventario.models import Categoria
     
-    categoria_id = data.get("categoria_id")
+    categoria_nombre = (data.get("categoria_nombre") or "").strip()
     categoria = None
-    if categoria_id:
-        try:
-            categoria = Categoria.objects.get(pk=categoria_id)
-        except Categoria.DoesNotExist:
-            pass  # Dejar categoria como None si no existe
+    if categoria_nombre:
+        # Buscar o crear la categoría
+        categoria, created = Categoria.objects.get_or_create(
+            nombre=categoria_nombre,
+            defaults={'esta_activa': True}
+        )
 
     producto = Producto.objects.create(
         codigo_barras=codigo_barras if codigo_barras else None,
@@ -335,18 +336,17 @@ def actualizar_producto(request, producto_id: int):
         except (ValueError, TypeError):
             pass
 
-    # Actualizar categoría
-    if "categoria_id" in data:
-        categoria_id = data.get("categoria_id")
-        if categoria_id:
-            try:
-                from inventario.models import Categoria
-                producto.categoria = Categoria.objects.get(pk=categoria_id)
-            except Categoria.DoesNotExist:
-                return JsonResponse(
-                    {"error": "Categoría no encontrada."},
-                    status=404,
-                )
+    # Actualizar categoría por nombre
+    if "categoria_nombre" in data:
+        categoria_nombre = (data.get("categoria_nombre") or "").strip()
+        if categoria_nombre:
+            from inventario.models import Categoria
+            # Buscar o crear la categoría
+            categoria, created = Categoria.objects.get_or_create(
+                nombre=categoria_nombre,
+                defaults={'esta_activa': True}
+            )
+            producto.categoria = categoria
         else:
             producto.categoria = None
 

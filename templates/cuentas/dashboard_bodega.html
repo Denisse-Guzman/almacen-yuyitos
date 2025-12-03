@@ -254,6 +254,41 @@
             gap: 1rem;
         }
 
+        /* Autocomplete suggestions */
+        .autocomplete-container {
+            position: relative;
+        }
+
+        .autocomplete-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 100;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .autocomplete-suggestion {
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        .autocomplete-suggestion:hover {
+            background: var(--gray-50);
+        }
+
+        .autocomplete-suggestion.active {
+            background: var(--primary);
+            color: white;
+        }
+
         /* Toast */
         .toast {
             position: fixed;
@@ -376,9 +411,18 @@
 
                     <div class="form-group">
                         <label class="form-label">Categoría</label>
-                        <select class="form-select" id="product-category">
-                            <option value="">Sin categoría</option>
-                        </select>
+                        <div class="autocomplete-container">
+                            <input 
+                                type="text" 
+                                class="form-input" 
+                                id="product-category" 
+                                placeholder="Escribe o selecciona una categoría..."
+                                autocomplete="off">
+                            <div class="autocomplete-suggestions" id="category-suggestions"></div>
+                        </div>
+                        <small style="color: var(--gray-600); font-size: 0.75rem;">
+                            Escribe una categoría nueva o selecciona una existente
+                        </small>
                     </div>
 
                     <div class="form-row">
@@ -454,7 +498,6 @@
 
         // Switch Tab
         function switchTab(tabName) {
-            // Actualizar botones
             document.querySelectorAll('.nav-tab').forEach(btn => {
                 btn.classList.remove('active');
                 if (btn.dataset.tab === tabName) {
@@ -462,14 +505,12 @@
                 }
             });
 
-            // Actualizar secciones
             document.querySelectorAll('.section').forEach(section => {
                 section.classList.remove('active');
             });
             document.getElementById(`${tabName}-section`).classList.add('active');
         }
 
-        // Event listeners para tabs
         document.querySelectorAll('.nav-tab').forEach(btn => {
             btn.addEventListener('click', function() {
                 switchTab(this.dataset.tab);
@@ -496,7 +537,6 @@
         function renderInventory(products = null) {
             const tbody = document.getElementById('inventory-tbody');
             
-            // Si no se pasan productos, usar los filtrados
             if (products === null) {
                 products = getFilteredProducts();
             }
@@ -536,7 +576,6 @@
         function getFilteredProducts() {
             let filtered = app.products;
             
-            // Filtro de búsqueda
             const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
             if (searchTerm) {
                 filtered = filtered.filter(p => 
@@ -545,7 +584,6 @@
                 );
             }
             
-            // Filtro de categoría
             const categoryFilter = document.getElementById('category-filter').value;
             if (categoryFilter) {
                 filtered = filtered.filter(p => p.categoria === categoryFilter);
@@ -563,22 +601,14 @@
                 const data = await response.json();
                 app.categories = data.results || [];
                 
-                // Cargar en el select del formulario
-                const select = document.getElementById('product-category');
-                select.innerHTML = '<option value="">Sin categoría</option>' +
-                    app.categories.map(cat => `<option value="${cat.id}">${cat.nombre}</option>`).join('');
-                
-                // Cargar en el filtro
                 loadCategoryFilter();
             } catch (error) {
                 console.error('Error al cargar categorías:', error);
-                // No mostrar toast para no molestar, las categorías son opcionales
             }
         }
 
         // Load Category Filter
         function loadCategoryFilter() {
-            // Obtener categorías únicas de los productos
             const productCategories = [...new Set(
                 app.products
                     .map(p => p.categoria)
@@ -590,6 +620,94 @@
                 productCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
         }
 
+        // Category Autocomplete
+        const categoryInput = document.getElementById('product-category');
+        const suggestionsDiv = document.getElementById('category-suggestions');
+        let selectedSuggestionIndex = -1;
+
+        categoryInput.addEventListener('input', function() {
+            const value = this.value.toLowerCase();
+            
+            if (value.length === 0) {
+                suggestionsDiv.innerHTML = '';
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+
+            // Obtener categorías únicas de productos
+            const allCategories = [...new Set(
+                app.products
+                    .map(p => p.categoria)
+                    .filter(c => c && c !== 'Sin categoría')
+            )];
+
+            const matches = allCategories.filter(cat => 
+                cat.toLowerCase().includes(value)
+            );
+
+            if (matches.length === 0) {
+                suggestionsDiv.innerHTML = '';
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+
+            suggestionsDiv.innerHTML = matches.map((cat, index) => 
+                `<div class="autocomplete-suggestion" data-index="${index}">${cat}</div>`
+            ).join('');
+            suggestionsDiv.style.display = 'block';
+            selectedSuggestionIndex = -1;
+
+            // Event listeners para sugerencias
+            suggestionsDiv.querySelectorAll('.autocomplete-suggestion').forEach(div => {
+                div.addEventListener('click', function() {
+                    categoryInput.value = this.textContent;
+                    suggestionsDiv.innerHTML = '';
+                    suggestionsDiv.style.display = 'none';
+                });
+            });
+        });
+
+        // Keyboard navigation for autocomplete
+        categoryInput.addEventListener('keydown', function(e) {
+            const suggestions = suggestionsDiv.querySelectorAll('.autocomplete-suggestion');
+            
+            if (suggestions.length === 0) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, suggestions.length - 1);
+                updateSelectedSuggestion(suggestions);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, -1);
+                updateSelectedSuggestion(suggestions);
+            } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
+                e.preventDefault();
+                suggestions[selectedSuggestionIndex].click();
+            } else if (e.key === 'Escape') {
+                suggestionsDiv.innerHTML = '';
+                suggestionsDiv.style.display = 'none';
+            }
+        });
+
+        function updateSelectedSuggestion(suggestions) {
+            suggestions.forEach((div, index) => {
+                div.classList.toggle('active', index === selectedSuggestionIndex);
+            });
+            
+            if (selectedSuggestionIndex >= 0) {
+                suggestions[selectedSuggestionIndex].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        // Close suggestions on outside click
+        document.addEventListener('click', function(e) {
+            if (!categoryInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+                suggestionsDiv.innerHTML = '';
+                suggestionsDiv.style.display = 'none';
+            }
+        });
+
         // Edit Product
         function editProduct(id) {
             const product = app.products.find(p => p.id === id);
@@ -598,20 +716,17 @@
                 return;
             }
             
-            // Cambiar a tab de administración
             switchTab('admin');
             
-            // Llenar formulario
             document.getElementById('product-id').value = product.id;
             document.getElementById('product-code').value = product.codigo_barras || '';
             document.getElementById('product-name').value = product.nombre;
-            document.getElementById('product-category').value = product.categoria_id || '';
+            document.getElementById('product-category').value = product.categoria || '';
             document.getElementById('product-price').value = parseFloat(product.precio_venta);
             document.getElementById('product-stock').value = product.stock_actual;
             document.getElementById('product-description').value = product.descripcion || '';
             document.getElementById('product-active').checked = product.es_activo || product.activo;
             
-            // Cambiar título y botones
             document.getElementById('form-title').textContent = '✏️ Editar Producto';
             document.getElementById('btn-save-product').textContent = '💾 Actualizar Producto';
             document.getElementById('btn-cancel-edit').style.display = 'inline-block';
@@ -621,7 +736,7 @@
         function cancelEdit() {
             document.getElementById('product-id').value = '';
             document.getElementById('product-form').reset();
-            document.getElementById('product-active').checked = true; // Resetear a activo por defecto
+            document.getElementById('product-active').checked = true;
             document.getElementById('form-title').textContent = 'Agregar Nuevo Producto';
             document.getElementById('btn-save-product').textContent = '💾 Guardar Producto';
             document.getElementById('btn-cancel-edit').style.display = 'none';
@@ -634,13 +749,13 @@
             const productId = document.getElementById('product-id').value;
             const isEditing = productId !== '';
             
-            const categoryId = document.getElementById('product-category').value;
+            const categoriaNombre = document.getElementById('product-category').value.trim();
             
             const productData = {
                 codigo_barras: document.getElementById('product-code').value.trim() || null,
                 nombre: document.getElementById('product-name').value.trim(),
                 descripcion: document.getElementById('product-description').value.trim(),
-                categoria_id: categoryId ? parseInt(categoryId) : null,
+                categoria_nombre: categoriaNombre || null,
                 precio_compra: parseFloat(document.getElementById('product-price').value) * 0.7,
                 precio_venta: parseFloat(document.getElementById('product-price').value),
                 stock_actual: parseInt(document.getElementById('product-stock').value),
@@ -720,15 +835,13 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async function() {
-            await loadCategories(); // Cargar categorías primero
+            await loadCategories();
             await loadProducts();
             
-            // Event listener para búsqueda
             document.getElementById('search-input').addEventListener('input', function() {
                 renderInventory();
             });
             
-            // Event listener para filtro de categoría
             document.getElementById('category-filter').addEventListener('change', function() {
                 renderInventory();
             });

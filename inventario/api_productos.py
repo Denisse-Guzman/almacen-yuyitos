@@ -1,5 +1,5 @@
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -424,3 +424,32 @@ def eliminar_producto(request, producto_id: int):
             status=200,
         )
 
+@login_required
+@require_http_methods(["GET"])
+def listar_categorias(request):
+    """Listar todas las categorías activas"""
+    try:
+        from .models import Categoria
+        
+        categorias = Categoria.objects.filter(esta_activa=True).order_by('nombre')
+        
+        results = [
+            {
+                "id": cat.id,
+                "nombre": cat.nombre,
+                "descripcion": cat.descripcion,
+                "esta_activa": cat.esta_activa
+            }
+            for cat in categorias
+        ]
+        
+        return JsonResponse({
+            "count": len(results),
+            "results": results
+        })
+        
+    except Exception as e:
+        return JsonResponse(
+            {"error": f"Error al listar categorías: {str(e)}"},
+            status=500
+        )

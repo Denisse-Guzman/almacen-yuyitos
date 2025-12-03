@@ -1,6 +1,7 @@
 from django.urls import path
 from . import api_productos
 
+
 urlpatterns = [
     # Listar productos
     path(
@@ -37,5 +38,12 @@ urlpatterns = [
         "productos/<int:producto_id>/eliminar/",
         api_productos.eliminar_producto,
         name="api_productos_eliminar",
+    ),
+
+    # Listar categorías
+    path(
+        "categorias/",
+        api_productos.listar_categorias,
+        name="api_categorias_lista",
     ),
 ]

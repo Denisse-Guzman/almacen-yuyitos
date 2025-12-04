@@ -1424,22 +1424,22 @@
             <h1 class="section-title" style="margin-bottom: 1.5rem;">Reportes y Estadísticas</h1>
 
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-                <div style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" data-stat="sales-today">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                         <div style="color: var(--gray-600); font-size: 0.875rem; font-weight: 500;">Ventas Hoy</div>
                         <div style="width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #d1fae5; color: #065f46; font-size: 1.25rem;">💵</div>
                     </div>
-                    <div style="font-size: 2rem; font-weight: 700; color: var(--gray-900);">$0</div>
-                    <div style="color: var(--gray-600); font-size: 0.75rem; margin-top: 0.5rem;">En desarrollo</div>
+                    <div class="stat-value" style="font-size: 2rem; font-weight: 700; color: var(--gray-900);">$0</div>
+                    <div class="stat-change" style="color: var(--gray-600); font-size: 0.75rem; margin-top: 0.5rem;">Cargando...</div>
                 </div>
 
-                <div style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" data-stat="transactions">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                         <div style="color: var(--gray-600); font-size: 0.875rem; font-weight: 500;">Transacciones</div>
                         <div style="width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #dbeafe; color: #1e40af; font-size: 1.25rem;">🛒</div>
                     </div>
-                    <div style="font-size: 2rem; font-weight: 700; color: var(--gray-900);">0</div>
-                    <div style="color: var(--gray-600); font-size: 0.75rem; margin-top: 0.5rem;">En desarrollo</div>
+                    <div class="stat-value" style="font-size: 2rem; font-weight: 700; color: var(--gray-900);">0</div>
+                    <div class="stat-change" style="color: var(--gray-600); font-size: 0.75rem; margin-top: 0.5rem;">Cargando...</div>
                 </div>
 
                 <div style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -1788,6 +1788,58 @@
         // Format money
         function formatMoney(amount) {
             return '$' + new Intl.NumberFormat('es-CL').format(Math.round(amount));
+        }
+
+        // Load sales statistics
+        async function loadSalesStats() {
+            try {
+                const response = await fetch('/api/ventas/estadisticas/hoy/');
+                
+                if (!response.ok) {
+                    throw new Error('Error al cargar estadísticas');
+                }
+                
+                const data = await response.json();
+                
+                // Actualizar Ventas Hoy
+                const salesTodayCard = document.querySelector('[data-stat="sales-today"]');
+                if (salesTodayCard) {
+                    const valueDiv = salesTodayCard.querySelector('.stat-value');
+                    const changeDiv = salesTodayCard.querySelector('.stat-change');
+                    
+                    if (valueDiv) {
+                        valueDiv.textContent = formatMoney(data.total_ventas || 0);
+                    }
+                    if (changeDiv) {
+                        changeDiv.textContent = 'Total del día';
+                    }
+                }
+                
+                // Actualizar Transacciones
+                const transactionsCard = document.querySelector('[data-stat="transactions"]');
+                if (transactionsCard) {
+                    const valueDiv = transactionsCard.querySelector('.stat-value');
+                    const changeDiv = transactionsCard.querySelector('.stat-change');
+                    
+                    if (valueDiv) {
+                        valueDiv.textContent = data.cantidad_ventas || 0;
+                    }
+                    if (changeDiv) {
+                        changeDiv.textContent = 'Ventas realizadas';
+                    }
+                }
+                
+                console.log('✅ Estadísticas cargadas:', data);
+                
+            } catch (error) {
+                console.error('❌ Error al cargar estadísticas:', error);
+                // Si falla, dejar texto de error
+                const salesTodayChange = document.querySelector('[data-stat="sales-today"] .stat-change');
+                const transactionsChange = document.querySelector('[data-stat="transactions"] .stat-change');
+                
+                if (salesTodayChange) salesTodayChange.textContent = 'Error al cargar';
+                if (transactionsChange) transactionsChange.textContent = 'Error al cargar';
+            }
         }
 
         // Switch tabs
@@ -2927,6 +2979,7 @@
             await loadCategories();
             await loadProducts();
             await loadClients();
+            await loadSalesStats();
             
             // Event listeners para búsqueda de inventario
             const inventorySearch = document.getElementById('inventory-search');

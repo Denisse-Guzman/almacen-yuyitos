@@ -13,6 +13,9 @@ from .models import Venta, DetalleVenta
 from django.contrib.auth.decorators import login_required, user_passes_test
 from cuentas.permisos import es_cajero_o_admin
 
+from django.db.models import Sum, Count
+from django.utils import timezone
+
 def _obtener_cliente(data):
     """
     Intenta obtener un cliente por cliente_id o rut.
@@ -290,3 +293,29 @@ def crear_venta(request):
         }
 
     return JsonResponse(resp, status=201)
+
+@login_required
+@user_passes_test(es_cajero_o_admin)
+def estadisticas_hoy(request):
+    """
+    Retorna estadísticas de ventas del día actual:
+    - Total de ventas en dinero
+    - Cantidad de transacciones
+    """
+    # Obtener fecha de hoy (sin hora)
+    hoy = timezone.now().date()
+    
+    # Consultar ventas del día
+    ventas_hoy = Venta.objects.filter(
+        fecha__date=hoy
+    ).aggregate(
+        total_ventas=Sum('total'),
+        cantidad_ventas=Count('id')
+    )
+    
+    # Retornar datos (manejar None si no hay ventas)
+    return JsonResponse({
+        'total_ventas': float(ventas_hoy['total_ventas'] or 0),
+        'cantidad_ventas': ventas_hoy['cantidad_ventas'] or 0,
+        'fecha': hoy.isoformat()
+    })

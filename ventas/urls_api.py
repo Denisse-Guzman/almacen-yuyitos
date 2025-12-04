@@ -36,4 +36,9 @@ urlpatterns = [
         api_reportes.productos_mas_vendidos,
         name="api_reportes_productos_mas_vendidos",
     ),
+    path("reportes/ventas-por-categoria/", 
+         api_reportes.ventas_por_categoria),
+
+    path("reportes/productos-top/", 
+         api_reportes.productos_mas_vendidos_mejorado)
 ]

@@ -6,7 +6,7 @@ from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
 from .models import Venta, DetalleVenta
@@ -217,3 +217,43 @@ def productos_mas_vendidos(request):
         "productos": resultados,
     }
     return JsonResponse(data, status=200)
+
+@login_required
+@require_http_methods(["GET"])
+def ventas_por_categoria(request):
+    ventas_categoria = DetalleVenta.objects.select_related(
+        'producto', 'producto__categoria'
+    ).values(
+        categoria_nombre=F('producto__categoria__nombre')
+    ).annotate(
+        total_ventas=Sum('subtotal')
+    ).order_by('-total_ventas')
+    
+    categorias = [{
+        'categoria': item['categoria_nombre'] or 'Sin categoría',
+        'total': float(item['total_ventas'] or 0)
+    } for item in ventas_categoria]
+    
+    return JsonResponse({'categorias': categorias})
+
+
+@login_required
+@require_http_methods(["GET"])
+def productos_mas_vendidos_mejorado(request):
+    productos_top = DetalleVenta.objects.select_related(
+        'producto'
+    ).values(
+        'producto__id', 'producto__nombre'
+    ).annotate(
+        cantidad_total=Sum('cantidad'),
+        total_ventas=Sum('subtotal')
+    ).order_by('-cantidad_total')[:10]
+    
+    productos = [{
+        'id': item['producto__id'],
+        'nombre': item['producto__nombre'],
+        'cantidad': item['cantidad_total'],
+        'total': float(item['total_ventas'] or 0)
+    } for item in productos_top]
+    
+    return JsonResponse({'productos': productos})

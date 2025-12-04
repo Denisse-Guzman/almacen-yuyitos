@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 import json 
-
+from django.contrib.auth.models import Group
 from unittest.mock import patch 
 
 from django.test import TestCase
@@ -212,32 +212,45 @@ class BaseApiCreditoTestCase(BaseCreditoTestCase):
     Base para pruebas de la API de crédito.
 
     - Crea un cliente de prueba (viene de BaseCreditoTestCase)
-    - Crea un usuario tipo admin/cajero
+    - Crea un usuario tipo cajero/admin
+    - Lo agrega al grupo 'Cajero' (compatible con es_cajero_o_admin)
     - Inicia sesión con ese usuario en self.client
     """
 
     def setUp(self):
-        # Llamamos primero al setUp de BaseCreditoTestCase
+        # Cliente base (self.cliente)
         super().setUp()
 
         User = get_user_model()
 
-        # Creamos un usuario con permisos altos
+        # Usuario para la API
         self.user = User.objects.create_user(
             username="cajero_api",
+            email="cajero@example.com",
             password="testpass123",
-            is_staff=True,      # suele bastar para muchos checks
-            is_superuser=True,  # por si es_cajero_o_admin revisa esto
+            is_staff=True,
+            is_superuser=True,  # lo dejamos por si acaso
         )
 
-        # Iniciamos sesión en el test client
+        # Creamos (o reutilizamos) los grupos que usa es_cajero_o_admin
+        grupo_cajero, _ = Group.objects.get_or_create(name="Cajero")
+        grupo_admin, _ = Group.objects.get_or_create(name="Admin")
+
+        # Metemos al usuario en al menos uno de esos grupos
+        self.user.groups.add(grupo_cajero)
+        self.user.save()
+
+        # Hacemos login con ese usuario
         logged_in = self.client.login(
             username="cajero_api",
             password="testpass123",
         )
 
-        # Si algo sale mal, mejor que el test lo marque como fallo
-        self.assertTrue(logged_in, "No se pudo hacer login en el cliente de tests")
+        self.assertTrue(
+            logged_in,
+            "No se pudo hacer login en el cliente de tests para BaseApiCreditoTestCase",
+        )
+
 
 class ApiCreditoAbonarTests(BaseApiCreditoTestCase):
     def test_abono_api_valido_devuelve_201_y_actualiza_saldo(self):
@@ -362,37 +375,6 @@ class ApiCreditoAbonarTests(BaseApiCreditoTestCase):
         # self.assertIn("error", data)
 
 class ApiCreditoSaldoTests(BaseApiCreditoTestCase):
-    def test_saldo_api_cliente_existente_devuelve_200_y_datos_correctos(self):
-        """
-        Un GET a /api/creditos/saldo/ con cliente_id válido debería:
-        - responder 200
-        - devolver datos del cliente incluyendo saldo_actual correcto
-        """
-        # Aseguramos un saldo conocido
-        self.cliente.saldo_actual = Decimal("12345.00")
-        self.cliente.save()
-
-        response = self.client.get(
-            "/api/creditos/saldo/",
-            {"cliente_id": self.cliente.id},
-        )
-
-        # Desde el punto de vista del plan de pruebas, lo ESPERADO es 200
-        self.assertEqual(response.status_code, 200)
-
-        data = response.json()
-
-        # Debe traer un objeto cliente con al menos id, nombre y saldo_actual
-        self.assertIn("cliente", data)
-        cliente_json = data["cliente"]
-
-        self.assertEqual(cliente_json["id"], self.cliente.id)
-        self.assertEqual(cliente_json["nombre"], self.cliente.nombre)
-        self.assertEqual(
-            Decimal(cliente_json["saldo_actual"]),
-            Decimal("12345.00"),
-        )
-
     def test_saldo_api_cliente_existente_devuelve_200_y_datos_correctos(self):
         """
         Un GET a /api/creditos/saldo/ con cliente_id válido debería:
@@ -625,7 +607,8 @@ class ApiCreditoClientesConDeudaTests(BaseApiCreditoTestCase):
             saldo_actual=Decimal("0.00"),
         )
 
-        response = self.client.get("/api/creditos/clientes-con-deuda/")
+        response = self.client.get("/api/clientes-con-deuda/")
+
 
         # Desde el plan de pruebas, lo esperado es 200 OK
         self.assertEqual(response.status_code, 200)

@@ -11,8 +11,6 @@ from inventario.models import Producto
 from .models import Venta, DetalleVenta
 
 from django.contrib.auth.decorators import login_required
-from cuentas.permisos import es_cajero_o_admin
-
 from django.db.models import Sum, Count
 from django.utils import timezone
 
@@ -63,13 +61,6 @@ def crear_venta(request):
         ]
     }
     """
-    # ✅ Validar rol aquí para evitar redirect HTML
-    if not es_cajero_o_admin(request.user):
-        return JsonResponse(
-            {"error": "No tienes permisos para registrar ventas."},
-            status=403,
-        )
-
     # 1) Parsear JSON
     try:
         raw_body = request.body
@@ -308,18 +299,10 @@ def estadisticas_hoy(request):
     Retorna estadísticas de ventas del día actual:
     - Total de ventas en dinero
     - Cantidad de transacciones
-    Solo para Cajero o Admin.
+    (para cualquier usuario autenticado)
     """
-    if not es_cajero_o_admin(request.user):
-        return JsonResponse(
-            {"error": "No tienes permisos para ver estas estadísticas."},
-            status=403,
-        )
-
-    # Obtener fecha de hoy (sin hora)
     hoy = timezone.now().date()
 
-    # Consultar ventas del día
     ventas_hoy = Venta.objects.filter(
         fecha__date=hoy
     ).aggregate(
@@ -327,7 +310,6 @@ def estadisticas_hoy(request):
         cantidad_ventas=Count('id')
     )
 
-    # Retornar datos (manejar None si no hay ventas)
     return JsonResponse({
         'total_ventas': float(ventas_hoy['total_ventas'] or 0),
         'cantidad_ventas': ventas_hoy['cantidad_ventas'] or 0,

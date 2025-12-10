@@ -42,7 +42,7 @@ urlpatterns = [
         api_clientes.crear_cliente,
         name="crear_cliente",
     ),
-    # NUEVA RUTA: Actualizar cliente
+    #  Actualizar cliente
     path(
         "clientes/<int:cliente_id>/actualizar/",
         api_clientes.actualizar_cliente,

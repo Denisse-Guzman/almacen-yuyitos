@@ -7,9 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import Cliente, MovimientoCredito
 
-from django.contrib.auth.decorators import login_required, user_passes_test
-from cuentas.permisos import es_cajero_o_admin
-from cuentas.permisos import es_admin
+
 def _obtener_cliente(data):
     """
     Intenta obtener un cliente por cliente_id o rut.
@@ -37,8 +35,6 @@ def _obtener_cliente(data):
 # 1) ABONAR CRÉDITO 
 # =========================
 @csrf_exempt
-@login_required
-@user_passes_test(es_cajero_o_admin)
 @require_POST
 def abonar_credito(request):
     """
@@ -132,13 +128,11 @@ def abonar_credito(request):
 # 2) VER SALDO DE UN CLIENTE
 # =========================
 @csrf_exempt
-@login_required
-@user_passes_test(es_cajero_o_admin)
 @require_GET
 def ver_saldo(request):
     """
     Consulta el saldo y cupo de un cliente.
-
+    GET /api/creditos/ver-saldo/?cliente_id=... o ?rut=...
     """
     data = {
         "cliente_id": request.GET.get("cliente_id"),
@@ -158,7 +152,6 @@ def ver_saldo(request):
             status=404,
         )
 
-    # cliente.saldo_actual o cliente.obtener_saldo_actual()
     saldo = cliente.saldo_actual
     cupo = cliente.cupo_maximo
     disponible = cupo - saldo
@@ -183,13 +176,11 @@ def ver_saldo(request):
 # 3) LISTAR MOVIMIENTOS DE CRÉDITO
 # =========================
 @csrf_exempt
-@login_required
-@user_passes_test(es_cajero_o_admin)
 @require_GET
 def listar_movimientos(request):
     """
     Lista los movimientos de crédito de un cliente.
-
+    GET /api/creditos/movimientos/?cliente_id=... o ?rut=...
     """
     data = {
         "cliente_id": request.GET.get("cliente_id"),
@@ -244,14 +235,13 @@ def listar_movimientos(request):
         status=200,
     )
 
-@login_required
-@user_passes_test(es_admin)
-@require_GET
 
+@csrf_exempt
+@require_GET
 def clientes_con_deuda(request):
     """
-
     Lista los clientes con saldo_actual > 0, ordenados por deuda.
+    GET /api/creditos/clientes-con-deuda/
     """
     qs = Cliente.objects.filter(saldo_actual__gt=0).order_by("-saldo_actual")
 

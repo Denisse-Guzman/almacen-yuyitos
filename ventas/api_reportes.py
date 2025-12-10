@@ -6,13 +6,14 @@ from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
-from django.views.decorators.http import require_GET, require_POST, require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
 from .models import Venta, DetalleVenta
 
 from django.contrib.auth.decorators import login_required, user_passes_test
 from cuentas.permisos import es_admin
+
 
 def _rango_fechas(request):
     """
@@ -75,7 +76,7 @@ def ventas_resumen(request):
         total_credito=Sum("total", filter=Q(es_credito=True)),
     )
 
-    # Normaliza Decimal a string (por seguridad)
+    # Normaliza Decimal a string
     def _str_dec(v):
         if v is None:
             return "0.00"
@@ -105,7 +106,6 @@ def ventas_resumen(request):
 @require_GET
 def ventas_por_dia(request):
     """
-
     Devuelve una lista de días con:
     - fecha
     - cantidad_ventas
@@ -163,9 +163,8 @@ def ventas_por_dia(request):
 @require_GET
 def productos_mas_vendidos(request):
     """
-
-
     Devuelve top N productos por cantidad vendida en el rango.
+    GET /api/reportes/productos-mas-vendidos/?limit=10
     """
     inicio_dt, fin_dt, fecha_desde, fecha_hasta = _rango_fechas(request)
 
@@ -218,9 +217,16 @@ def productos_mas_vendidos(request):
     }
     return JsonResponse(data, status=200)
 
+
+@csrf_exempt
 @login_required
+@user_passes_test(es_admin)
 @require_http_methods(["GET"])
 def ventas_por_categoria(request):
+    """
+    Devuelve ventas agrupadas por categoría (para el gráfico de torta/barras).
+    GET /api/reportes/ventas-por-categoria/
+    """
     ventas_categoria = DetalleVenta.objects.select_related(
         'producto', 'producto__categoria'
     ).values(
@@ -234,12 +240,18 @@ def ventas_por_categoria(request):
         'total': float(item['total_ventas'] or 0)
     } for item in ventas_categoria]
     
-    return JsonResponse({'categorias': categorias})
+    return JsonResponse({'categorias': categorias}, status=200)
 
 
+@csrf_exempt
 @login_required
+@user_passes_test(es_admin)
 @require_http_methods(["GET"])
 def productos_mas_vendidos_mejorado(request):
+    """
+    Devuelve top 10 productos más vendidos (cantidad y total).
+    GET /api/reportes/productos-top/
+    """
     productos_top = DetalleVenta.objects.select_related(
         'producto'
     ).values(
@@ -256,4 +268,4 @@ def productos_mas_vendidos_mejorado(request):
         'total': float(item['total_ventas'] or 0)
     } for item in productos_top]
     
-    return JsonResponse({'productos': productos})
+    return JsonResponse({'productos': productos}, status=200)

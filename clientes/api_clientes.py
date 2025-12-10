@@ -8,16 +8,11 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import Cliente
 
-from django.contrib.auth.decorators import login_required, user_passes_test
-from cuentas.permisos import es_cajero_o_admin
 
 @csrf_exempt
-@login_required
-@user_passes_test(es_cajero_o_admin)
 @require_GET
 def lista_clientes(request):
     """
-
     Lista clientes activos, con búsqueda opcional por nombre, RUT o teléfono.
     """
     q = request.GET.get("q", "").strip()
@@ -68,7 +63,6 @@ def lista_clientes(request):
 @require_GET
 def detalle_cliente(request, cliente_id):
     """
-
     Devuelve el detalle de un cliente.
     """
     try:
@@ -109,6 +103,7 @@ def detalle_cliente(request, cliente_id):
 @require_POST
 def crear_cliente(request):
     """
+    Crea un cliente nuevo.
 
     Body JSON:
     {
@@ -207,16 +202,15 @@ def crear_cliente(request):
         status=201,
     )
 
+
 @csrf_exempt
-@login_required
-@user_passes_test(es_cajero_o_admin)
 @require_POST
 def actualizar_cliente(request, cliente_id):
     """
     Actualiza los datos de un cliente existente.
-    
-    PUT/POST /api/clientes/<cliente_id>/actualizar/
-    
+
+    POST /api/clientes/<cliente_id>/actualizar/
+
     Body JSON:
     {
         "nombre": "Juan Pérez",
@@ -235,7 +229,7 @@ def actualizar_cliente(request, cliente_id):
             {"error": "Cliente no encontrado."},
             status=404,
         )
-    
+
     try:
         data = json.loads(request.body.decode("utf-8"))
     except json.JSONDecodeError:
@@ -248,28 +242,28 @@ def actualizar_cliente(request, cliente_id):
     nombre = (data.get("nombre") or "").strip()
     if nombre:
         cliente.nombre = nombre
-    
+
     telefono = data.get("telefono")
     if telefono is not None:
         cliente.telefono = telefono.strip()
-    
+
     email = data.get("email")
     if email is not None:
         cliente.email = email.strip()
-    
+
     direccion = data.get("direccion")
     if direccion is not None:
         cliente.direccion = direccion.strip()
-    
+
     # Actualizar estado activo
     if "es_activo" in data:
         cliente.es_activo = bool(data.get("es_activo"))
-    
+
     # Actualizar crédito
     if "tiene_credito" in data:
         tiene_credito = bool(data.get("tiene_credito"))
         cliente.tiene_credito = tiene_credito
-        
+
         if tiene_credito and "cupo_maximo" in data:
             cupo_raw = data.get("cupo_maximo")
             try:
@@ -279,27 +273,31 @@ def actualizar_cliente(request, cliente_id):
                     {"error": "El campo 'cupo_maximo' debe ser un número válido."},
                     status=400,
                 )
-            
+
             if cupo_maximo < 0:
                 return JsonResponse(
                     {"error": "El cupo máximo no puede ser negativo."},
                     status=400,
                 )
-            
+
             # Validar que el nuevo cupo no sea menor al saldo actual
             if cupo_maximo < cliente.saldo_actual:
                 return JsonResponse(
                     {"error": f"El cupo máximo no puede ser menor a la deuda actual (${cliente.saldo_actual})."},
                     status=400,
                 )
-            
+
             cliente.cupo_maximo = cupo_maximo
-    
+
     cliente.save()
-    
+
     # Preparar respuesta
-    disponible = cliente.cupo_maximo - cliente.saldo_actual if cliente.tiene_credito else Decimal("0.00")
-    
+    disponible = (
+        cliente.cupo_maximo - cliente.saldo_actual
+        if cliente.tiene_credito
+        else Decimal("0.00")
+    )
+
     data_resp = {
         "id": cliente.id,
         "nombre": cliente.nombre,
@@ -313,7 +311,7 @@ def actualizar_cliente(request, cliente_id):
         "disponible": str(disponible),
         "es_activo": cliente.es_activo,
     }
-    
+
     return JsonResponse(
         {
             "mensaje": "Cliente actualizado correctamente.",

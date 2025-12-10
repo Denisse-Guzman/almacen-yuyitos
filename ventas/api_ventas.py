@@ -2,7 +2,7 @@ import json
 from decimal import Decimal, InvalidOperation
 
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 
@@ -10,11 +10,12 @@ from clientes.models import Cliente
 from inventario.models import Producto
 from .models import Venta, DetalleVenta
 
-from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.decorators import login_required
 from cuentas.permisos import es_cajero_o_admin
 
 from django.db.models import Sum, Count
 from django.utils import timezone
+
 
 def _obtener_cliente(data):
     """
@@ -40,13 +41,10 @@ def _obtener_cliente(data):
 
 @csrf_exempt
 @login_required
-@user_passes_test(es_cajero_o_admin)
 @require_POST
 def crear_venta(request):
     """
     Crea una venta (contado o crédito) con sus detalles.
-
-  
 
     JSON esperado:
 
@@ -65,6 +63,13 @@ def crear_venta(request):
         ]
     }
     """
+    # ✅ Validar rol aquí para evitar redirect HTML
+    if not es_cajero_o_admin(request.user):
+        return JsonResponse(
+            {"error": "No tienes permisos para registrar ventas."},
+            status=403,
+        )
+
     # 1) Parsear JSON
     try:
         raw_body = request.body
@@ -73,11 +78,11 @@ def crear_venta(request):
             body_str = raw_body.decode(encoding)
         except UnicodeDecodeError:
             body_str = raw_body.decode("latin-1")
-           
+
         data = json.loads(body_str)
     except json.JSONDecodeError:
         return JsonResponse({"error": "JSON inválido."}, status=400)
-    
+
     # 2) Cliente (opcional, pero obligatorio si es crédito)
     cliente = _obtener_cliente(data)
     nombre_cliente_libre = (data.get("nombre_cliente_libre") or "").strip()
@@ -294,17 +299,26 @@ def crear_venta(request):
 
     return JsonResponse(resp, status=201)
 
+
+@csrf_exempt
 @login_required
-@user_passes_test(es_cajero_o_admin)
+@require_GET
 def estadisticas_hoy(request):
     """
     Retorna estadísticas de ventas del día actual:
     - Total de ventas en dinero
     - Cantidad de transacciones
+    Solo para Cajero o Admin.
     """
+    if not es_cajero_o_admin(request.user):
+        return JsonResponse(
+            {"error": "No tienes permisos para ver estas estadísticas."},
+            status=403,
+        )
+
     # Obtener fecha de hoy (sin hora)
     hoy = timezone.now().date()
-    
+
     # Consultar ventas del día
     ventas_hoy = Venta.objects.filter(
         fecha__date=hoy
@@ -312,7 +326,7 @@ def estadisticas_hoy(request):
         total_ventas=Sum('total'),
         cantidad_ventas=Count('id')
     )
-    
+
     # Retornar datos (manejar None si no hay ventas)
     return JsonResponse({
         'total_ventas': float(ventas_hoy['total_ventas'] or 0),

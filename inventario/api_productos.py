@@ -38,17 +38,21 @@ def _producto_a_dict(producto: Producto):
 def _puede_ver_productos(user):
     """
     Permiso: puede ver productos si es Cajero, Bodeguero o Admin.
-    (Ya no se usa en las vistas de lectura para evitar redirecciones al login)
+    (YA NO se usa en las vistas de lectura para evitar redirecciones al login)
     """
     return es_cajero_o_admin(user) or es_bodeguero_o_admin(user)
 
 
+# =========================
+# 1) LISTAR / VER PRODUCTOS (SIN LOGIN)
+# =========================
+
 @csrf_exempt
-@login_required
 @require_GET
 def listar_productos(request):
     """
     Lista productos, opcionalmente filtrando por nombre con ?q=
+    GET /api/productos/
     """
     q = request.GET.get("q", "").strip()
 
@@ -71,11 +75,11 @@ def listar_productos(request):
 
 
 @csrf_exempt
-@login_required
 @require_GET
 def detalle_producto(request, producto_id: int):
     """
     Devuelve la info de un producto específico.
+    GET /api/productos/<id>/
     """
     try:
         producto = Producto.objects.get(pk=producto_id)
@@ -92,11 +96,11 @@ def detalle_producto(request, producto_id: int):
 
 
 @csrf_exempt
-@login_required
 @require_GET
 def stock_producto(request, producto_id: int):
     """
     Devuelve solo info de stock (útil para el POS).
+    GET /api/productos/<id>/stock/
     """
     try:
         producto = Producto.objects.get(pk=producto_id)
@@ -116,6 +120,10 @@ def stock_producto(request, producto_id: int):
     )
 
 
+# =========================
+# 2) CRUD DE PRODUCTOS (PROTEGIDO: BODEGUERO O ADMIN)
+# =========================
+
 @csrf_exempt
 @login_required
 @user_passes_test(es_bodeguero_o_admin)
@@ -131,7 +139,7 @@ def crear_producto(request):
         "codigo_barras": "123456",
         "nombre": "Coca Cola 2.0 lt",
         "descripcion": "Bebida gaseosa",
-        "categoria_nombre": "Bebidas",  // Ahora es nombre de categoría
+        "categoria_nombre": "Bebidas",
         "precio_compra": "1000",
         "precio_venta": "1800",
         "stock_actual": 50,
@@ -202,7 +210,6 @@ def crear_producto(request):
     categoria_nombre = (data.get("categoria_nombre") or "").strip()
     categoria = None
     if categoria_nombre:
-        # Buscar o crear la categoría
         categoria, created = Categoria.objects.get_or_create(
             nombre=categoria_nombre,
             defaults={'esta_activa': True}
@@ -240,8 +247,6 @@ def actualizar_producto(request, producto_id: int):
     Actualiza un producto existente.
     
     POST /api/productos/<producto_id>/actualizar/
-    
-    Body JSON: (mismo formato que crear_producto)
     """
     try:
         producto = Producto.objects.get(pk=producto_id)
@@ -268,11 +273,10 @@ def actualizar_producto(request, producto_id: int):
     if "descripcion" in data:
         producto.descripcion = data.get("descripcion", "")
 
-    # Actualizar código de barras (validar que sea único)
+    # Actualizar código de barras
     if "codigo_barras" in data:
         codigo_barras = (data.get("codigo_barras") or "").strip()
         if codigo_barras:
-            # Verificar que no exista otro producto con ese código
             existe = Producto.objects.filter(codigo_barras=codigo_barras).exclude(pk=producto_id).exists()
             if existe:
                 return JsonResponse(
@@ -335,7 +339,6 @@ def actualizar_producto(request, producto_id: int):
         categoria_nombre = (data.get("categoria_nombre") or "").strip()
         if categoria_nombre:
             from inventario.models import Categoria
-            # Buscar o crear la categoría
             categoria, created = Categoria.objects.get_or_create(
                 nombre=categoria_nombre,
                 defaults={'esta_activa': True}
@@ -372,14 +375,9 @@ def actualizar_producto(request, producto_id: int):
 @require_POST
 def eliminar_producto(request, producto_id: int):
     """
-    Desactiva un producto (eliminación lógica).
+    Desactiva un producto (eliminación lógica) o lo elimina físicamente.
     
     POST /api/productos/<producto_id>/eliminar/
-    
-    Body JSON:
-    {
-        "eliminar_permanente": false  // opcional, por defecto false
-    }
     """
     try:
         producto = Producto.objects.get(pk=producto_id)
@@ -397,7 +395,6 @@ def eliminar_producto(request, producto_id: int):
     eliminar_permanente = data.get("eliminar_permanente", False)
 
     if eliminar_permanente:
-        # Eliminación física (solo si el admin lo permite)
         nombre_producto = producto.nombre
         producto.delete()
         return JsonResponse(
@@ -407,7 +404,6 @@ def eliminar_producto(request, producto_id: int):
             status=200,
         )
     else:
-        # Eliminación lógica (desactivar)
         producto.es_activo = False
         producto.save()
         return JsonResponse(
@@ -419,7 +415,11 @@ def eliminar_producto(request, producto_id: int):
         )
 
 
-@login_required
+# =========================
+# 3) CATEGORÍAS (LECTURA SIN LOGIN)
+# =========================
+
+@csrf_exempt
 @require_http_methods(["GET"])
 def listar_categorias(request):
     """Listar todas las categorías activas"""

@@ -29,6 +29,7 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
 ALLOWED_HOSTS = [
     "almacen-yuyitos.onrender.com",  # dominio de Render
     "localhost",
+    "127.0.0.1",
 ]
 
 

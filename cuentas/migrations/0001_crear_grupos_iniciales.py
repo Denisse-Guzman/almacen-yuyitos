@@ -24,8 +24,7 @@ def revertir(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('cuentas', 'XXXX_anterior_migracion'),  # <- Cambia por la migración anterior
-        ('auth', '0012_alter_user_first_name_max_length'),  # Dependencia de auth
+        ('auth', '0012_alter_user_first_name_max_length'),
     ]
 
     operations = [

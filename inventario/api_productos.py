@@ -15,7 +15,6 @@ from decimal import Decimal, InvalidOperation
 def _producto_a_dict(producto: Producto):
     """
     Serializa un producto a dict simple para JSON.
-    Ajusta los campos según tu modelo real.
     """
     return {
         "id": producto.id,
@@ -35,120 +34,46 @@ def _producto_a_dict(producto: Producto):
     }
 
 
-def _puede_ver_productos(user):
-    """
-    Permiso: puede ver productos si es Cajero, Bodeguero o Admin.
-    (YA NO se usa en las vistas de lectura para evitar redirecciones al login)
-    """
-    return es_cajero_o_admin(user) or es_bodeguero_o_admin(user)
-
-
 # =========================
-# 1) LISTAR / VER PRODUCTOS (SIN LOGIN)
+# LISTAR / CREAR PRODUCTOS
 # =========================
-
-@csrf_exempt
-@require_GET
-def listar_productos(request):
-    """
-    Lista productos, opcionalmente filtrando por nombre con ?q=
-    GET /api/productos/
-    """
-    q = request.GET.get("q", "").strip()
-
-    productos = Producto.objects.all()
-
-    if q:
-        productos = productos.filter(nombre__icontains=q)
-
-    productos = productos.order_by("nombre")
-
-    data = [_producto_a_dict(p) for p in productos]
-
-    return JsonResponse(
-        {
-            "count": len(data),
-            "results": data,
-        },
-        status=200,
-    )
-
-
-@csrf_exempt
-@require_GET
-def detalle_producto(request, producto_id: int):
-    """
-    Devuelve la info de un producto específico.
-    GET /api/productos/<id>/
-    """
-    try:
-        producto = Producto.objects.get(pk=producto_id)
-    except Producto.DoesNotExist:
-        return JsonResponse(
-            {"error": "Producto no encontrado."},
-            status=404,
-        )
-
-    return JsonResponse(
-        _producto_a_dict(producto),
-        status=200,
-    )
-
-
-@csrf_exempt
-@require_GET
-def stock_producto(request, producto_id: int):
-    """
-    Devuelve solo info de stock (útil para el POS).
-    GET /api/productos/<id>/stock/
-    """
-    try:
-        producto = Producto.objects.get(pk=producto_id)
-    except Producto.DoesNotExist:
-        return JsonResponse(
-            {"error": "Producto no encontrado."},
-            status=404,
-        )
-
-    return JsonResponse(
-        {
-            "id": producto.id,
-            "nombre": producto.nombre,
-            "stock_actual": producto.stock_actual,
-        },
-        status=200,
-    )
-
-
-# =========================
-# 2) CRUD DE PRODUCTOS (PROTEGIDO: BODEGUERO O ADMIN)
-# =========================
-
 @csrf_exempt
 @login_required
-@user_passes_test(es_bodeguero_o_admin)
-@require_POST
-def crear_producto(request):
+@require_http_methods(["GET", "POST"])
+def productos_collection(request):
     """
-    Crea un nuevo producto.
-    
-    POST /api/productos/crear/
-    
-    Body JSON:
-    {
-        "codigo_barras": "123456",
-        "nombre": "Coca Cola 2.0 lt",
-        "descripcion": "Bebida gaseosa",
-        "categoria_nombre": "Bebidas",
-        "precio_compra": "1000",
-        "precio_venta": "1800",
-        "stock_actual": 50,
-        "stock_minimo": 10,
-        "tiene_vencimiento": false,
-        "fecha_vencimiento": null,
-        "es_activo": true
-    }
+    GET  /api/productos/  -> lista productos
+    POST /api/productos/  -> crea producto (solo bodeguero o admin)
     """
+    # ---------- GET: listar ----------
+    if request.method == "GET":
+        q = request.GET.get("q", "").strip()
+
+        productos = Producto.objects.all()
+
+        if q:
+            productos = productos.filter(nombre__icontains=q)
+
+        productos = productos.order_by("nombre")
+
+        data = [_producto_a_dict(p) for p in productos]
+
+        return JsonResponse(
+            {
+                "count": len(data),
+                "results": data,
+            },
+            status=200,
+        )
+
+    # ---------- POST: crear ----------
+    # Solo bodeguero o admin crean
+    if not es_bodeguero_o_admin(request.user):
+        return JsonResponse(
+            {"error": "No tienes permisos para crear productos."},
+            status=403,
+        )
+
     try:
         data = json.loads(request.body.decode("utf-8"))
     except json.JSONDecodeError:
@@ -206,13 +131,13 @@ def crear_producto(request):
 
     # Manejar categoría por nombre (crear si no existe)
     from inventario.models import Categoria
-    
+
     categoria_nombre = (data.get("categoria_nombre") or "").strip()
     categoria = None
     if categoria_nombre:
-        categoria, created = Categoria.objects.get_or_create(
+        categoria, _ = Categoria.objects.get_or_create(
             nombre=categoria_nombre,
-            defaults={'esta_activa': True}
+            defaults={"esta_activa": True},
         )
 
     producto = Producto.objects.create(
@@ -225,8 +150,8 @@ def crear_producto(request):
         stock_actual=stock_actual,
         stock_minimo=stock_minimo,
         tiene_vencimiento=bool(data.get("tiene_vencimiento", False)),
-        fecha_vencimiento=data.get("fecha_vencimiento"),
-        es_activo=bool(data.get("es_activo", True)),
+        fecha_vencimiento=data.get("fecha_vencimiento") or None,
+        es_activo=True,  # siempre activo al crear
     )
 
     return JsonResponse(
@@ -238,15 +163,15 @@ def crear_producto(request):
     )
 
 
+# =========================
+# DETALLE / STOCK
+# =========================
 @csrf_exempt
 @login_required
-@user_passes_test(es_bodeguero_o_admin)
-@require_POST
-def actualizar_producto(request, producto_id: int):
+@require_GET
+def detalle_producto(request, producto_id: int):
     """
-    Actualiza un producto existente.
-    
-    POST /api/productos/<producto_id>/actualizar/
+    Devuelve la info de un producto específico.
     """
     try:
         producto = Producto.objects.get(pk=producto_id)
@@ -256,195 +181,65 @@ def actualizar_producto(request, producto_id: int):
             status=404,
         )
 
+    return JsonResponse(_producto_a_dict(producto), status=200)
+
+
+@csrf_exempt
+@login_required
+@require_GET
+def stock_producto(request, producto_id: int):
+    """
+    Devuelve solo info de stock (útil para el POS).
+    """
     try:
-        data = json.loads(request.body.decode("utf-8"))
-    except json.JSONDecodeError:
+        producto = Producto.objects.get(pk=producto_id)
+    except Producto.DoesNotExist:
         return JsonResponse(
-            {"error": "JSON inválido en el cuerpo de la solicitud."},
-            status=400,
+            {"error": "Producto no encontrado."},
+            status=404,
         )
-
-    # Actualizar nombre
-    nombre = (data.get("nombre") or "").strip()
-    if nombre:
-        producto.nombre = nombre
-    
-    # Actualizar descripción
-    if "descripcion" in data:
-        producto.descripcion = data.get("descripcion", "")
-
-    # Actualizar código de barras
-    if "codigo_barras" in data:
-        codigo_barras = (data.get("codigo_barras") or "").strip()
-        if codigo_barras:
-            existe = Producto.objects.filter(codigo_barras=codigo_barras).exclude(pk=producto_id).exists()
-            if existe:
-                return JsonResponse(
-                    {"error": "Ya existe otro producto con ese código de barras."},
-                    status=400,
-                )
-            producto.codigo_barras = codigo_barras
-        else:
-            producto.codigo_barras = None
-
-    # Actualizar precios
-    if "precio_compra" in data:
-        try:
-            producto.precio_compra = Decimal(str(data.get("precio_compra")))
-        except (InvalidOperation, TypeError):
-            return JsonResponse(
-                {"error": "El precio de compra debe ser un número válido."},
-                status=400,
-            )
-
-    if "precio_venta" in data:
-        try:
-            precio_venta = Decimal(str(data.get("precio_venta")))
-            if precio_venta <= 0:
-                return JsonResponse(
-                    {"error": "El precio de venta debe ser mayor que 0."},
-                    status=400,
-                )
-            producto.precio_venta = precio_venta
-        except (InvalidOperation, TypeError):
-            return JsonResponse(
-                {"error": "El precio de venta debe ser un número válido."},
-                status=400,
-            )
-
-    # Actualizar stock
-    if "stock_actual" in data:
-        try:
-            stock = int(data.get("stock_actual"))
-            if stock < 0:
-                return JsonResponse(
-                    {"error": "El stock no puede ser negativo."},
-                    status=400,
-                )
-            producto.stock_actual = stock
-        except (ValueError, TypeError):
-            return JsonResponse(
-                {"error": "El stock debe ser un número entero."},
-                status=400,
-            )
-
-    if "stock_minimo" in data:
-        try:
-            producto.stock_minimo = int(data.get("stock_minimo", 0))
-        except (ValueError, TypeError):
-            pass
-
-    # Actualizar categoría por nombre
-    if "categoria_nombre" in data:
-        categoria_nombre = (data.get("categoria_nombre") or "").strip()
-        if categoria_nombre:
-            from inventario.models import Categoria
-            categoria, created = Categoria.objects.get_or_create(
-                nombre=categoria_nombre,
-                defaults={'esta_activa': True}
-            )
-            producto.categoria = categoria
-        else:
-            producto.categoria = None
-
-    # Actualizar vencimiento
-    if "tiene_vencimiento" in data:
-        producto.tiene_vencimiento = bool(data.get("tiene_vencimiento"))
-    
-    if "fecha_vencimiento" in data:
-        producto.fecha_vencimiento = data.get("fecha_vencimiento")
-
-    # Actualizar estado activo
-    if "es_activo" in data:
-        producto.es_activo = bool(data.get("es_activo"))
-
-    producto.save()
 
     return JsonResponse(
         {
-            "mensaje": "Producto actualizado correctamente.",
-            "producto": _producto_a_dict(producto),
+            "id": producto.id,
+            "nombre": producto.nombre,
+            "stock_actual": producto.stock_actual,
         },
         status=200,
     )
 
 
-@csrf_exempt
+# =========================
+# CATEGORÍAS
+# =========================
 @login_required
-@user_passes_test(es_bodeguero_o_admin)
-@require_POST
-def eliminar_producto(request, producto_id: int):
-    """
-    Desactiva un producto (eliminación lógica) o lo elimina físicamente.
-    
-    POST /api/productos/<producto_id>/eliminar/
-    """
-    try:
-        producto = Producto.objects.get(pk=producto_id)
-    except Producto.DoesNotExist:
-        return JsonResponse(
-            {"error": "Producto no encontrado."},
-            status=404,
-        )
-
-    try:
-        data = json.loads(request.body.decode("utf-8")) if request.body else {}
-    except json.JSONDecodeError:
-        data = {}
-
-    eliminar_permanente = data.get("eliminar_permanente", False)
-
-    if eliminar_permanente:
-        nombre_producto = producto.nombre
-        producto.delete()
-        return JsonResponse(
-            {
-                "mensaje": f"Producto '{nombre_producto}' eliminado permanentemente.",
-            },
-            status=200,
-        )
-    else:
-        producto.es_activo = False
-        producto.save()
-        return JsonResponse(
-            {
-                "mensaje": f"Producto '{producto.nombre}' desactivado correctamente.",
-                "producto": _producto_a_dict(producto),
-            },
-            status=200,
-        )
-
-
-# =========================
-# 3) CATEGORÍAS (LECTURA SIN LOGIN)
-# =========================
-
-@csrf_exempt
 @require_http_methods(["GET"])
 def listar_categorias(request):
     """Listar todas las categorías activas"""
     try:
         from .models import Categoria
-        
-        categorias = Categoria.objects.filter(esta_activa=True).order_by('nombre')
-        
+
+        categorias = Categoria.objects.filter(esta_activa=True).order_by("nombre")
+
         results = [
             {
                 "id": cat.id,
                 "nombre": cat.nombre,
                 "descripcion": cat.descripcion,
-                "esta_activa": cat.esta_activa
+                "esta_activa": cat.esta_activa,
             }
             for cat in categorias
         ]
-        
-        return JsonResponse({
-            "count": len(results),
-            "results": results
-        })
-        
+
+        return JsonResponse(
+            {
+                "count": len(results),
+                "results": results,
+            }
+        )
+
     except Exception as e:
         return JsonResponse(
             {"error": f"Error al listar categorías: {str(e)}"},
-            status=500
+            status=500,
         )

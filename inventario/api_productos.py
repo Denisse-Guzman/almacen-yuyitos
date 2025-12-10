@@ -35,21 +35,19 @@ def _producto_a_dict(producto: Producto):
     }
 
 
-
 def _puede_ver_productos(user):
     """
     Permiso: puede ver productos si es Cajero, Bodeguero o Admin.
+    (Ya no se usa en las vistas de lectura para evitar redirecciones al login)
     """
     return es_cajero_o_admin(user) or es_bodeguero_o_admin(user)
 
 
 @csrf_exempt
 @login_required
-@user_passes_test(_puede_ver_productos)
 @require_GET
 def listar_productos(request):
     """
-
     Lista productos, opcionalmente filtrando por nombre con ?q=
     """
     q = request.GET.get("q", "").strip()
@@ -74,11 +72,9 @@ def listar_productos(request):
 
 @csrf_exempt
 @login_required
-@user_passes_test(_puede_ver_productos)
 @require_GET
 def detalle_producto(request, producto_id: int):
     """
-
     Devuelve la info de un producto específico.
     """
     try:
@@ -97,12 +93,9 @@ def detalle_producto(request, producto_id: int):
 
 @csrf_exempt
 @login_required
-@user_passes_test(_puede_ver_productos)
 @require_GET
 def stock_producto(request, producto_id: int):
     """
-
-
     Devuelve solo info de stock (útil para el POS).
     """
     try:
@@ -121,6 +114,7 @@ def stock_producto(request, producto_id: int):
         },
         status=200,
     )
+
 
 @csrf_exempt
 @login_required
@@ -423,6 +417,7 @@ def eliminar_producto(request, producto_id: int):
             },
             status=200,
         )
+
 
 @login_required
 @require_http_methods(["GET"])

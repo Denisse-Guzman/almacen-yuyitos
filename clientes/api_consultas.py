@@ -2,15 +2,16 @@ from decimal import Decimal
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
+from django.views.decorators.csrf import csrf_exempt
 
 from .models import Cliente, MovimientoCredito
 from .api_credito import _obtener_cliente
 
 
+@csrf_exempt
 @require_GET
 def obtener_saldo_cliente(request):
     """
-
     Devuelve saldo_actual y disponible del cliente.
     """
     data = {
@@ -47,10 +48,10 @@ def obtener_saldo_cliente(request):
     )
 
 
+@csrf_exempt
 @require_GET
 def listar_movimientos_credito(request):
     """
-
     Lista los últimos movimientos de crédito de un cliente.
     """
     data = {
